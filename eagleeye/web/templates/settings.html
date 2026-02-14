@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block page_title %}Settings{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width:700px">
+    <div class="card-header">
+        <h3 class="card-title">AI Engine Configuration</h3>
+    </div>
+    <div class="card-body">
+        <p style="color:var(--text-secondary);margin-bottom:16px;font-size:13px">
+            Select which AI engines are active and set their fallback priority.
+            Drag or use arrows to reorder. The first available engine is used; others serve as fallback.
+        </p>
+
+        <div id="engineList" style="display:flex;flex-direction:column;gap:8px">
+            <!-- Populated by JS -->
+        </div>
+
+        <div id="engineError" style="color:var(--danger);font-size:13px;margin-top:8px;display:none"></div>
+
+        <div style="margin-top:20px;display:flex;align-items:center;gap:12px">
+            <button class="btn btn-primary" onclick="saveEngines()">Save Configuration</button>
+            <span id="saveStatus" style="font-size:13px;color:var(--success);display:none">Configuration saved</span>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const ENGINE_LABELS = {
+    ollama: 'Ollama (Local)',
+    claude: 'Claude (Cloud)',
+    huggingface: 'HuggingFace (Cloud)',
+};
+
+let engineOrder = [];
+let engineEnabled = {};
+let engineReachable = {};
+
+document.addEventListener('DOMContentLoaded', loadEngineConfig);
+
+async function loadEngineConfig() {
+    const [configRes, statusRes] = await Promise.all([
+        api('/api/settings/ai-engines'),
+        api('/api/status'),
+    ]);
+
+    if (configRes) {
+        engineOrder = configRes.engines || ['ollama', 'claude', 'huggingface'];
+        engineEnabled = {};
+        engineOrder.forEach(e => engineEnabled[e] = true);
+        // Add any missing engines as disabled at the end
+        ['ollama', 'claude', 'huggingface'].forEach(e => {
+            if (!engineOrder.includes(e)) {
+                engineOrder.push(e);
+                engineEnabled[e] = false;
+            }
+        });
+    }
+
+    if (statusRes && statusRes.engines_status) {
+        engineReachable = statusRes.engines_status;
+    }
+
+    renderEngines();
+}
+
+function renderEngines() {
+    const container = document.getElementById('engineList');
+    container.innerHTML = '';
+
+    engineOrder.forEach((eng, idx) => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm)';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = !!engineEnabled[eng];
+        checkbox.style.cssText = 'width:18px;height:18px;cursor:pointer;accent-color:var(--accent)';
+        checkbox.onchange = () => {
+            engineEnabled[eng] = checkbox.checked;
+            validateSelection();
+        };
+
+        const label = document.createElement('span');
+        label.textContent = ENGINE_LABELS[eng] || eng;
+        label.style.cssText = 'flex:1;font-size:14px';
+
+        const dot = document.createElement('span');
+        const reachable = engineReachable[eng];
+        dot.style.cssText = `width:10px;height:10px;border-radius:50%;display:inline-block;background:${reachable ? 'var(--success)' : 'var(--danger)'}`;
+        dot.title = reachable ? 'Reachable' : 'Unreachable';
+
+        const statusText = document.createElement('span');
+        statusText.textContent = reachable ? 'Online' : 'Offline';
+        statusText.style.cssText = `font-size:12px;color:${reachable ? 'var(--success)' : 'var(--text-muted)'};width:48px`;
+
+        const arrows = document.createElement('div');
+        arrows.style.cssText = 'display:flex;flex-direction:column;gap:2px';
+
+        const upBtn = document.createElement('button');
+        upBtn.innerHTML = '&#9650;';
+        upBtn.className = 'btn btn-secondary';
+        upBtn.style.cssText = 'padding:0 6px;font-size:10px;line-height:16px;min-width:0';
+        upBtn.disabled = idx === 0;
+        upBtn.onclick = () => moveEngine(idx, -1);
+
+        const downBtn = document.createElement('button');
+        downBtn.innerHTML = '&#9660;';
+        downBtn.className = 'btn btn-secondary';
+        downBtn.style.cssText = 'padding:0 6px;font-size:10px;line-height:16px;min-width:0';
+        downBtn.disabled = idx === engineOrder.length - 1;
+        downBtn.onclick = () => moveEngine(idx, 1);
+
+        arrows.appendChild(upBtn);
+        arrows.appendChild(downBtn);
+
+        row.appendChild(checkbox);
+        row.appendChild(label);
+        row.appendChild(dot);
+        row.appendChild(statusText);
+        row.appendChild(arrows);
+        container.appendChild(row);
+    });
+}
+
+function moveEngine(idx, direction) {
+    const newIdx = idx + direction;
+    if (newIdx < 0 || newIdx >= engineOrder.length) return;
+    [engineOrder[idx], engineOrder[newIdx]] = [engineOrder[newIdx], engineOrder[idx]];
+    renderEngines();
+}
+
+function validateSelection() {
+    const selected = engineOrder.filter(e => engineEnabled[e]);
+    const err = document.getElementById('engineError');
+    if (selected.length === 0) {
+        err.textContent = 'At least one engine must be selected.';
+        err.style.display = 'block';
+        return false;
+    }
+    err.style.display = 'none';
+    return true;
+}
+
+async function saveEngines() {
+    if (!validateSelection()) return;
+
+    const selected = engineOrder.filter(e => engineEnabled[e]);
+    const statusEl = document.getElementById('saveStatus');
+    statusEl.style.display = 'none';
+
+    try {
+        const res = await fetch('/api/settings/ai-engines', {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({engines: selected}),
+        });
+        if (!res.ok) {
+            const data = await res.json();
+            document.getElementById('engineError').textContent = data.detail || 'Save failed';
+            document.getElementById('engineError').style.display = 'block';
+            return;
+        }
+        statusEl.style.display = 'inline';
+        setTimeout(() => statusEl.style.display = 'none', 3000);
+
+        // Refresh status dots
+        const statusRes = await api('/api/status');
+        if (statusRes && statusRes.engines_status) {
+            engineReachable = statusRes.engines_status;
+            renderEngines();
+        }
+    } catch (e) {
+        document.getElementById('engineError').textContent = 'Network error: ' + e.message;
+        document.getElementById('engineError').style.display = 'block';
+    }
+}
+</script>
+{% endblock %}

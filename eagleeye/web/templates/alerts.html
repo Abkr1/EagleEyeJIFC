@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Alerts{% endblock %}
+{% block page_title %}Security Alerts{% endblock %}
+
+{% block content %}
+<div class="filters-bar">
+    <select class="form-control" id="alertState" onchange="loadAlerts()">
+        <option value="">All States</option>
+        <option>Zamfara</option><option>Kaduna</option><option>Katsina</option>
+        <option>Sokoto</option><option>Niger</option><option>Kebbi</option>
+    </select>
+    <select class="form-control" id="alertSeverity" onchange="loadAlerts()">
+        <option value="1">All Severities</option>
+        <option value="3">Elevated+</option>
+        <option value="4">High+</option>
+        <option value="5">Critical Only</option>
+    </select>
+    <button class="btn btn-secondary" onclick="loadAlerts()">Refresh</button>
+    <span id="alertCount" style="color:var(--text-muted);font-size:13px"></span>
+</div>
+
+<div id="alertsList">
+    <div class="loading"><div class="spinner"></div> Loading alerts...</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => { loadAlerts(); });
+
+async function loadAlerts() {
+    const state = document.getElementById('alertState').value;
+    const severity = document.getElementById('alertSeverity').value;
+    let url = `/api/alerts?min_severity=${severity}`;
+    if (state) url += `&state=${state}`;
+
+    const data = await api(url);
+    if (!data) return;
+
+    document.getElementById('alertCount').textContent = `${data.total} active alerts`;
+    const container = document.getElementById('alertsList');
+
+    if (!data.alerts || !data.alerts.length) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">&#128276;</div>
+                <div class="empty-state-text">No Active Alerts</div>
+                <div class="empty-state-hint">Alerts are generated from predictions, anomaly detection, and escalation analysis.<br>
+                Train the model and run analysis to generate alerts.</div>
+            </div>`;
+        return;
+    }
+
+    container.innerHTML = data.alerts.map(a => `
+        <div class="alert-item" id="alert-${a.id}">
+            <div class="alert-severity sev-${a.severity}"></div>
+            <div class="alert-content">
+                <div class="alert-title">${escapeHtml(a.title)}</div>
+                <div class="alert-desc">${escapeHtml(a.description)}</div>
+                <div class="alert-meta">
+                    ${a.severity_label} &middot; ${a.alert_type.replace(/_/g, ' ')} &middot;
+                    ${a.state || 'Regional'} &middot; ${formatDate(a.created_at)}
+                </div>
+            </div>
+            <div>
+                <button class="btn btn-sm btn-secondary" onclick="acknowledgeAlert(${a.id})">Acknowledge</button>
+            </div>
+        </div>`).join('');
+}
+
+async function acknowledgeAlert(id) {
+    const result = await api(`/api/alerts/${id}/acknowledge`, 'POST');
+    if (result && result.status === 'acknowledged') {
+        showToast('Alert acknowledged', 'success');
+        document.getElementById(`alert-${id}`).style.opacity = '0.4';
+        setTimeout(() => loadAlerts(), 1000);
+    }
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+{% endblock %}

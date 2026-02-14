@@ -1,0 +1,332 @@
+{% extends "base.html" %}
+{% block title %}Incidents{% endblock %}
+{% block page_title %}Incident Management{% endblock %}
+
+{% block content %}
+<div class="tabs">
+    <button class="tab active" onclick="switchTab(this, 'listPanel')">Incident List</button>
+    <button class="tab" onclick="switchTab(this, 'addPanel')">Add Incident</button>
+    <button class="tab" onclick="switchTab(this, 'mapPanel')">Map View</button>
+</div>
+
+<!-- Incident List -->
+<div class="tab-panel active" id="listPanel">
+    <div class="filters-bar">
+        <select class="form-control" id="filterState">
+            <option value="">All States</option>
+            <option>Zamfara</option><option>Kaduna</option><option>Katsina</option>
+            <option>Sokoto</option><option>Niger</option><option>Kebbi</option>
+        </select>
+        <select class="form-control" id="filterType">
+            <option value="">All Types</option>
+            <option value="village_raid">Village Raid</option>
+            <option value="kidnapping">Kidnapping</option>
+            <option value="highway_ambush">Highway Ambush</option>
+            <option value="cattle_rustling">Cattle Rustling</option>
+            <option value="market_attack">Market Attack</option>
+            <option value="attack_on_security_forces">Attack on Security Forces</option>
+            <option value="mining_site_attack">Mining Site Attack</option>
+            <option value="reprisal_attack">Reprisal Attack</option>
+            <option value="arms_smuggling">Arms Smuggling</option>
+            <option value="inter_gang_clash">Inter-Gang Clash</option>
+            <option value="displacement">Displacement</option>
+            <option value="negotiation_ransom">Ransom Negotiation</option>
+            <option value="infrastructure_attack">Infrastructure Attack</option>
+            <option value="camp_sighting">Camp Sighting</option>
+        </select>
+        <select class="form-control" id="filterDays">
+            <option value="">Select Time Range</option>
+            <option value="1">Last 1 Day</option>
+            <option value="7">Last 7 Days</option>
+            <option value="30">Last 30 Days</option>
+            <option value="90">Last 90 Days</option>
+            <option value="365">Last 1 Year</option>
+        </select>
+        <button class="btn btn-primary" onclick="loadIncidents()">Show Incidents</button>
+        <span id="incidentCount" style="color:var(--text-muted);font-size:13px"></span>
+    </div>
+
+    <div class="card" style="padding:0;overflow:auto">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>State</th>
+                    <th>LGA</th>
+                    <th>Type</th>
+                    <th>Killed</th>
+                    <th>Injured</th>
+                    <th>Kidnapped</th>
+                    <th>Cattle</th>
+                </tr>
+            </thead>
+            <tbody id="incidentsBody">
+                <tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted)">Select a time range and click <b>Show Incidents</b> to load data</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Add Incident -->
+<div class="tab-panel" id="addPanel">
+    <div class="card" style="max-width:800px">
+        <h3 style="margin-bottom:20px">Record New Incident</h3>
+        <form id="addIncidentForm" onsubmit="submitIncident(event)">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Date & Time *</label>
+                    <input type="datetime-local" class="form-control" id="incDate" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">State *</label>
+                    <select class="form-control" id="incState" required>
+                        <option value="">Select State</option>
+                        <option>Zamfara</option><option>Kaduna</option><option>Katsina</option>
+                        <option>Sokoto</option><option>Niger</option><option>Kebbi</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">LGA</label>
+                    <input type="text" class="form-control" id="incLga" placeholder="e.g., Anka">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Incident Type *</label>
+                    <select class="form-control" id="incType" required>
+                        <option value="village_raid">Village Raid</option>
+                        <option value="kidnapping">Kidnapping</option>
+                        <option value="highway_ambush">Highway Ambush</option>
+                        <option value="cattle_rustling">Cattle Rustling</option>
+                        <option value="market_attack">Market Attack</option>
+                        <option value="attack_on_security_forces">Attack on Security Forces</option>
+                        <option value="mining_site_attack">Mining Site Attack</option>
+                        <option value="reprisal_attack">Reprisal Attack</option>
+                        <option value="arms_smuggling">Arms Smuggling</option>
+                        <option value="inter_gang_clash">Inter-Gang Clash</option>
+                        <option value="displacement">Displacement</option>
+                        <option value="negotiation_ransom">Ransom Negotiation</option>
+                        <option value="infrastructure_attack">Infrastructure Attack</option>
+                        <option value="camp_sighting">Camp Sighting</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Location Name</label>
+                    <input type="text" class="form-control" id="incLocation" placeholder="e.g., Badarawa village">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Latitude</label>
+                    <input type="number" step="0.0001" class="form-control" id="incLat" placeholder="e.g., 12.11">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Longitude</label>
+                    <input type="number" step="0.0001" class="form-control" id="incLon" placeholder="e.g., 5.96">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Killed</label>
+                    <input type="number" class="form-control" id="incKilled" value="0" min="0">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Injured</label>
+                    <input type="number" class="form-control" id="incInjured" value="0" min="0">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Kidnapped</label>
+                    <input type="number" class="form-control" id="incKidnapped" value="0" min="0">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Cattle Stolen</label>
+                    <input type="number" class="form-control" id="incCattle" value="0" min="0">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Estimated Bandits</label>
+                    <input type="number" class="form-control" id="incBandits" min="0" placeholder="Optional">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Weapons Observed</label>
+                    <input type="text" class="form-control" id="incWeapons" placeholder="e.g., AK-47, machine gun">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Vehicles Used</label>
+                    <input type="text" class="form-control" id="incVehicles" placeholder="e.g., motorcycle">
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Description</label>
+                <textarea class="form-control" id="incDesc" rows="3" placeholder="Describe the incident..."></textarea>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Source</label>
+                    <input type="text" class="form-control" id="incSource" placeholder="e.g., Daily Trust">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Threat Level</label>
+                    <select class="form-control" id="incThreat">
+                        <option value="1">1 — LOW</option>
+                        <option value="2">2 — MODERATE</option>
+                        <option value="3" selected>3 — ELEVATED</option>
+                        <option value="4">4 — HIGH</option>
+                        <option value="5">5 — CRITICAL</option>
+                    </select>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-lg" style="margin-top:8px">Record Incident</button>
+        </form>
+    </div>
+</div>
+
+<!-- Map View -->
+<div class="tab-panel" id="mapPanel">
+    <div class="card" style="padding:0">
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border);flex-wrap:wrap">
+            <input type="text" class="form-control" id="incMapCoords" placeholder="Lat, Lon (e.g. 12.11, 5.96)" style="width:200px;font-size:12px;padding:4px 8px">
+            <button class="btn btn-secondary btn-sm" onclick="searchCoordinates(incidentMapInstance, 'incMapCoords')">Go</button>
+            <span style="color:var(--border);margin:0 4px">|</span>
+            <input type="text" class="form-control" id="incMapLocation" placeholder="Search location (e.g. Anka, Zamfara)" style="width:220px;font-size:12px;padding:4px 8px">
+            <button class="btn btn-secondary btn-sm" onclick="searchLocation(incidentMapInstance, 'incMapLocation')">Search</button>
+        </div>
+        <div class="map-container" style="height:calc(100vh - 240px)">
+            <div id="incidentMap"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let incidentMapInstance = null;
+
+async function loadIncidents() {
+    const state = document.getElementById('filterState').value;
+    const type = document.getElementById('filterType').value;
+    const days = document.getElementById('filterDays').value;
+
+    if (!days) {
+        showToast('Please select a time range', 'error');
+        return;
+    }
+
+    document.getElementById('incidentsBody').innerHTML = '<tr><td colspan="11" class="loading"><div class="spinner"></div> Loading...</td></tr>';
+
+    let url = `/api/incidents?days=${days}`;
+    if (state) url += `&state=${state}`;
+    if (type) url += `&incident_type=${type}`;
+
+    const data = await api(url);
+    if (data && data.incidents) {
+        document.getElementById('incidentCount').textContent = `${data.total} incidents`;
+        renderIncidentTable(data.incidents.reverse());
+    }
+}
+
+function renderIncidentTable(incidents) {
+    const body = document.getElementById('incidentsBody');
+    if (!incidents.length) {
+        body.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-muted)">No incidents found</td></tr>';
+        return;
+    }
+    body.innerHTML = incidents.map(i => `
+        <tr>
+            <td>${formatDate(i.date)}</td>
+            <td>${i.state}</td>
+            <td>${i.lga || '—'}</td>
+            <td><span class="badge ${getBadgeClass(i.incident_type)}">${formatType(i.incident_type)}</span></td>
+            <td>${i.casualties_killed || 0}</td>
+            <td>${i.casualties_injured || 0}</td>
+            <td>${i.kidnapped_count || 0}</td>
+            <td>${i.cattle_stolen || 0}</td>
+        </tr>
+    `).join('');
+}
+
+async function submitIncident(e) {
+    e.preventDefault();
+    const payload = {
+        date: document.getElementById('incDate').value + ':00',
+        state: document.getElementById('incState').value,
+        lga: document.getElementById('incLga').value || null,
+        location_name: document.getElementById('incLocation').value || null,
+        latitude: parseFloat(document.getElementById('incLat').value) || null,
+        longitude: parseFloat(document.getElementById('incLon').value) || null,
+        incident_type: document.getElementById('incType').value,
+        description: document.getElementById('incDesc').value || null,
+        casualties_killed: parseInt(document.getElementById('incKilled').value) || 0,
+        casualties_injured: parseInt(document.getElementById('incInjured').value) || 0,
+        kidnapped_count: parseInt(document.getElementById('incKidnapped').value) || 0,
+        cattle_stolen: parseInt(document.getElementById('incCattle').value) || 0,
+        estimated_bandits: parseInt(document.getElementById('incBandits').value) || null,
+        weapons_observed: document.getElementById('incWeapons').value || null,
+        vehicles_used: document.getElementById('incVehicles').value || null,
+        source: document.getElementById('incSource').value || null,
+        threat_level: parseInt(document.getElementById('incThreat').value),
+        confidence_score: 0.8,
+    };
+
+    const result = await api('/api/incidents', 'POST', payload);
+    if (result && result.id) {
+        showToast('Incident recorded successfully', 'success');
+        document.getElementById('addIncidentForm').reset();
+        switchTab(document.querySelector('.tab'), 'listPanel');
+        loadIncidents();
+    } else {
+        showToast('Failed to record incident', 'error');
+    }
+}
+
+// Initialize map when tab is shown
+document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        if (tab.textContent.trim() === 'Map View') {
+            if (!incidentMapInstance) {
+                setTimeout(initIncidentMap, 150);
+            } else {
+                setTimeout(() => incidentMapInstance.invalidateSize(), 150);
+            }
+        }
+    });
+});
+
+async function initIncidentMap() {
+    incidentMapInstance = L.map('incidentMap').setView([11.5, 6.5], 7);
+    bindCoordSearchEnter('incMapCoords', () => incidentMapInstance);
+    bindMapSearchEnter('incMapLocation', () => incidentMapInstance, searchLocation);
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: '&copy; Esri, Maxar, Earthstar Geographics',
+    }).addTo(incidentMapInstance);
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+        attribution: '',
+    }).addTo(incidentMapInstance);
+
+    const days = document.getElementById('filterDays').value;
+    if (!days) return;
+    const data = await api(`/api/incidents?days=${days}`);
+    if (!data || !data.incidents) return;
+
+    const withCoords = data.incidents.filter(i => i.latitude && i.longitude);
+    withCoords.forEach(i => {
+        const color = getThreatColor(i.threat_level || 2);
+        L.circleMarker([i.latitude, i.longitude], {
+            radius: 6 + (i.casualties_killed || 0) * 0.5,
+            fillColor: color,
+            color: color,
+            weight: 1,
+            opacity: 0.8,
+            fillOpacity: 0.5,
+        }).addTo(incidentMapInstance).bindPopup(
+            `<b>${formatType(i.incident_type)}</b><br>
+             ${i.state}${i.lga ? ', '+i.lga : ''}<br>
+             ${formatDate(i.date)}<br>
+             Killed: ${i.casualties_killed||0} | Kidnapped: ${i.kidnapped_count||0}<br>
+             ${i.description ? '<small>'+i.description.substring(0,150)+'...</small>' : ''}`
+        );
+    });
+}
+</script>
+{% endblock %}

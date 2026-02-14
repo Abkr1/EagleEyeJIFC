@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block title %}Analysis{% endblock %}
+{% block page_title %}Analysis Engine{% endblock %}
+
+{% block content %}
+<div class="filters-bar">
+    <select class="form-control" id="analysisState">
+        <option value="">All States</option>
+        <option>Zamfara</option><option>Kaduna</option><option>Katsina</option>
+        <option>Sokoto</option><option>Niger</option><option>Kebbi</option>
+    </select>
+    <select class="form-control" id="analysisDays">
+        <option value="">Select Time Range</option>
+        <option value="1">Last 1 Day</option>
+        <option value="7">Last 7 Days</option>
+        <option value="30">Last 30 Days</option>
+        <option value="90">Last 90 Days</option>
+        <option value="365">Last 1 Year</option>
+    </select>
+    <button class="btn btn-primary" onclick="runAnalysis()">Run Analysis</button>
+</div>
+
+<!-- Network -->
+<div id="networkNarrative" class="ai-narrative" style="display:none"></div>
+<div id="networkLoading" style="padding:20px;color:var(--text-muted);text-align:center">Select a time range and click <b>Run Analysis</b></div>
+<div class="grid grid-2">
+    <div class="card">
+        <div class="card-header"><div class="card-title">Operational Profiles</div></div>
+        <div id="profileData" style="max-height:450px;overflow-y:auto"></div>
+    </div>
+    <div class="card">
+        <div class="card-header"><div class="card-title">Operational Lulls</div></div>
+        <div id="lullData" style="max-height:450px;overflow-y:auto"></div>
+    </div>
+</div>
+<div class="card" style="margin-top:20px">
+    <div class="card-header"><div class="card-title">Activity Timeline</div></div>
+    <div class="chart-container" style="height:250px"><canvas id="timelineNetChart"></canvas></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+.ai-narrative {
+    margin-bottom: 20px;
+    padding: 16px 20px;
+    border-left: 3px solid var(--accent);
+    background: rgba(59,130,246,.05);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text-secondary);
+}
+.ai-narrative .narrative-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.ai-narrative p { margin: 8px 0; }
+</style>
+<script>
+let chartInstances = {};
+
+function renderNarrative(elementId, narrative) {
+    const el = document.getElementById(elementId);
+    if (!narrative || !el) return;
+    el.style.display = 'block';
+    const paragraphs = narrative.split('\n').filter(p => p.trim()).map(p => `<p>${p}</p>`).join('');
+    el.innerHTML = `<div class="narrative-header">&#9670; JIFC Analysis</div>${paragraphs}`;
+}
+
+async function runAnalysis() {
+    const state = document.getElementById('analysisState').value;
+    const days = document.getElementById('analysisDays').value;
+
+    if (!days) {
+        showToast('Please select a time range', 'error');
+        return;
+    }
+
+    document.getElementById('networkLoading').innerHTML = '<div class="loading"><div class="spinner"></div> Running analysis...</div>';
+
+    const qs = `?days=${days}` + (state ? `&state=${state}` : '');
+
+    const network = await api(`/api/analysis/network${qs}`);
+
+    if (network) {
+        document.getElementById('networkLoading').style.display = 'none';
+        renderNetwork(network);
+        renderNarrative('networkNarrative', network.narrative);
+    } else {
+        document.getElementById('networkLoading').innerHTML = '<div style="padding:20px;color:var(--text-muted)">No data available</div>';
+    }
+}
+
+function renderNetwork(data) {
+    // Profiles
+    const profiles = data.operational_profiles || [];
+    document.getElementById('profileData').innerHTML = profiles.length ? profiles.slice(0, 15).map(p => `
+        <div style="padding:10px 12px;border-bottom:1px solid var(--border)">
+            <div style="font-weight:600">${p.lga}, ${p.state}</div>
+            <div style="font-size:12px;color:var(--text-muted)">
+                ${p.incident_count} incidents &middot; Dominant: <span class="badge ${getBadgeClass(p.dominant_tactic)}">${formatType(p.dominant_tactic)}</span>
+                &middot; Avg interval: ${p.avg_interval_days}d
+                ${p.estimated_group_size ? '&middot; ~' + p.estimated_group_size + ' bandits' : ''}
+            </div>
+        </div>`).join('') : '<div style="padding:20px;color:var(--text-muted)">Not enough data</div>';
+
+    // Lulls
+    const lulls = data.operational_lulls || [];
+    document.getElementById('lullData').innerHTML = lulls.length ? lulls.map(l => `
+        <div style="padding:10px 12px;border-bottom:1px solid var(--border)">
+            <div style="font-weight:600">${l.gap_days} day gap</div>
+            <div style="font-size:12px;color:var(--text-muted)">
+                ${formatDate(l.start_date)} → ${formatDate(l.end_date)}
+                ${l.followed_by_surge ? '<span style="color:var(--danger)"> ⚠ Followed by surge</span>' : ''}
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${l.interpretation}</div>
+        </div>`).join('') : '<div style="padding:20px;color:var(--text-muted)">No significant lulls detected</div>';
+
+    // Timeline chart
+    const tl = data.activity_timeline;
+    if (tl && tl.timeline && tl.timeline.length) {
+        destroyChart('timelineNetChart');
+        const ctx = document.getElementById('timelineNetChart').getContext('2d');
+        chartInstances['timelineNetChart'] = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: tl.timeline.map(t => t.week_start),
+                datasets: [{
+                    label: 'Weekly Incidents',
+                    data: tl.timeline.map(t => t.incident_count),
+                    borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,.1)',
+                    fill: true, tension: 0.3, pointRadius: 2,
+                }]
+            },
+            options: chartOpts('Weekly Activity Timeline')
+        });
+    }
+}
+
+function chartOpts(title) {
+    return {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: '#8899a6', font: { size: 11 } } } },
+        scales: {
+            x: { ticks: { color: '#5c6f7e', maxRotation: 45 }, grid: { color: 'rgba(42,63,82,.3)' } },
+            y: { ticks: { color: '#5c6f7e' }, grid: { color: 'rgba(42,63,82,.3)' } }
+        }
+    };
+}
+
+function destroyChart(id) {
+    if (chartInstances[id]) { chartInstances[id].destroy(); delete chartInstances[id]; }
+}
+</script>
+{% endblock %}

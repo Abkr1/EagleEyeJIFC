@@ -1,0 +1,171 @@
+{
+  "description": "Geographic reference data for EagleEye target states in Northwest Nigeria",
+  "states": {
+    "Zamfara": {
+      "capital": "Gusau",
+      "capital_coords": [12.17, 6.66],
+      "area_km2": 39762,
+      "population_est": 4500000,
+      "border_states": ["Sokoto", "Katsina", "Kaduna", "Niger", "Kebbi"],
+      "border_countries": [],
+      "key_lgas": {
+        "Anka": {"coords": [12.11, 5.96], "risk_level": "high", "notes": "Frequent bandit corridor"},
+        "Zurmi": {"coords": [12.77, 6.75], "risk_level": "critical", "notes": "Border area, heavy bandit presence"},
+        "Shinkafi": {"coords": [13.07, 6.51], "risk_level": "high", "notes": "Cross-state operations hub"},
+        "Bukkuyum": {"coords": [12.13, 5.50], "risk_level": "high", "notes": "Highway ambush zone"},
+        "Maradun": {"coords": [12.29, 6.27], "risk_level": "high", "notes": "Active raiding zone"},
+        "Tsafe": {"coords": [12.12, 6.91], "risk_level": "elevated", "notes": "Market attack target"},
+        "Maru": {"coords": [12.33, 6.39], "risk_level": "elevated", "notes": "Ransom negotiation area"},
+        "Bungudu": {"coords": [12.27, 6.57], "risk_level": "elevated", "notes": "Seasonal attack target"},
+        "Gusau": {"coords": [12.17, 6.66], "risk_level": "moderate", "notes": "State capital, IDP reception"},
+        "Talata Mafara": {"coords": [12.57, 6.07], "risk_level": "high", "notes": "Dry season offensive zone"}
+      },
+      "key_corridors": [
+        "Anka-Bukkuyum axis",
+        "Zurmi-Shinkafi corridor",
+        "Gusau-Tsafe highway"
+      ],
+      "forest_areas": ["Rugu Forest", "Sububu Forest", "Kagara Forest"]
+    },
+    "Kaduna": {
+      "capital": "Kaduna",
+      "capital_coords": [10.52, 7.43],
+      "area_km2": 46053,
+      "population_est": 8200000,
+      "border_states": ["Zamfara", "Katsina", "Niger", "Plateau", "Bauchi", "Nassarawa"],
+      "border_countries": [],
+      "key_lgas": {
+        "Birnin Gwari": {"coords": [10.78, 6.50], "risk_level": "critical", "notes": "Major bandit enclave, forest base"},
+        "Chikun": {"coords": [10.40, 7.38], "risk_level": "high", "notes": "Kidnapping hotspot near capital"},
+        "Giwa": {"coords": [11.15, 7.38], "risk_level": "high", "notes": "Frequent raiding target"},
+        "Igabi": {"coords": [10.53, 7.39], "risk_level": "high", "notes": "Urban fringe kidnapping zone"},
+        "Kajuru": {"coords": [10.32, 7.68], "risk_level": "high", "notes": "Ethno-religious and bandit violence"},
+        "Kauru": {"coords": [10.70, 8.03], "risk_level": "elevated", "notes": "Night raid target area"}
+      },
+      "key_corridors": [
+        "Birnin Gwari-Kaduna highway",
+        "Kaduna-Abuja expressway (Kaduna section)",
+        "Southern Kaduna corridor"
+      ],
+      "forest_areas": ["Birnin Gwari Forest", "Kamuku National Park"]
+    },
+    "Katsina": {
+      "capital": "Katsina",
+      "capital_coords": [13.00, 7.60],
+      "area_km2": 24192,
+      "population_est": 7800000,
+      "border_states": ["Zamfara", "Kaduna", "Jigawa", "Kano"],
+      "border_countries": ["Niger Republic"],
+      "key_lgas": {
+        "Batsari": {"coords": [12.88, 7.30], "risk_level": "critical", "notes": "Frontline bandit territory"},
+        "Safana": {"coords": [12.90, 7.40], "risk_level": "critical", "notes": "Heavy bandit presence"},
+        "Danmusa": {"coords": [12.56, 7.28], "risk_level": "critical", "notes": "Coordinated attack zone"},
+        "Jibia": {"coords": [13.09, 7.23], "risk_level": "high", "notes": "Border area, arms route"},
+        "Faskari": {"coords": [12.20, 6.88], "risk_level": "high", "notes": "Dry season offensive area"},
+        "Dutsin-Ma": {"coords": [12.45, 7.50], "risk_level": "elevated", "notes": "Highway ambush zone"},
+        "Kankara": {"coords": [12.00, 7.40], "risk_level": "high", "notes": "Major kidnapping area"}
+      },
+      "key_corridors": [
+        "Batsari-Safana-Danmusa triangle",
+        "Jibia border crossing",
+        "Katsina-Dutsin Ma highway"
+      ],
+      "forest_areas": ["Rugu Forest (shared with Zamfara)"]
+    },
+    "Sokoto": {
+      "capital": "Sokoto",
+      "capital_coords": [13.06, 5.24],
+      "area_km2": 25973,
+      "population_est": 4900000,
+      "border_states": ["Zamfara", "Kebbi"],
+      "border_countries": ["Niger Republic"],
+      "key_lgas": {
+        "Rabah": {"coords": [13.06, 5.36], "risk_level": "high", "notes": "Cattle rustling zone"},
+        "Sabon Birni": {"coords": [13.56, 6.27], "risk_level": "high", "notes": "Security force attacks"},
+        "Illela": {"coords": [13.73, 5.30], "risk_level": "elevated", "notes": "Cross-border rustling"},
+        "Goronyo": {"coords": [13.44, 5.68], "risk_level": "elevated", "notes": "Market attack target"},
+        "Isa": {"coords": [13.20, 5.90], "risk_level": "elevated", "notes": "Border zone activity"},
+        "Tangaza": {"coords": [13.44, 5.12], "risk_level": "moderate", "notes": "Occasional cross-border incidents"}
+      },
+      "key_corridors": [
+        "Eastern Sokoto-Zamfara border zone",
+        "Sokoto-Niger Republic border"
+      ],
+      "forest_areas": []
+    },
+    "Niger": {
+      "capital": "Minna",
+      "capital_coords": [9.62, 6.55],
+      "area_km2": 76363,
+      "population_est": 5500000,
+      "border_states": ["Zamfara", "Kaduna", "Kebbi", "Kwara", "Kogi", "FCT"],
+      "border_countries": ["Benin Republic"],
+      "key_lgas": {
+        "Shiroro": {"coords": [9.97, 6.18], "risk_level": "critical", "notes": "Bandit/terrorist convergence zone"},
+        "Rafi": {"coords": [10.19, 6.26], "risk_level": "high", "notes": "Raiding and kidnapping zone"},
+        "Munya": {"coords": [9.68, 6.58], "risk_level": "high", "notes": "Kidnapping corridor"},
+        "Kontagora": {"coords": [10.40, 5.47], "risk_level": "elevated", "notes": "Highway ambush area"},
+        "Mashegu": {"coords": [10.10, 5.75], "risk_level": "elevated", "notes": "Cattle rustling area"},
+        "Mariga": {"coords": [10.86, 5.64], "risk_level": "elevated", "notes": "Bordering Zamfara, spillover area"}
+      },
+      "key_corridors": [
+        "Shiroro-Munya-Rafi triangle",
+        "Kontagora-Rijau axis",
+        "Minna-Bida highway"
+      ],
+      "forest_areas": ["Kamuku National Park", "Kainji Lake area"]
+    },
+    "Kebbi": {
+      "capital": "Birnin Kebbi",
+      "capital_coords": [12.45, 4.20],
+      "area_km2": 36800,
+      "population_est": 3800000,
+      "border_states": ["Zamfara", "Sokoto", "Niger"],
+      "border_countries": ["Niger Republic", "Benin Republic"],
+      "key_lgas": {
+        "Wasagu/Danko": {"coords": [11.38, 4.43], "risk_level": "high", "notes": "Cross-border bandit zone"},
+        "Zuru": {"coords": [11.44, 5.23], "risk_level": "high", "notes": "Zamfara spillover area"},
+        "Yauri": {"coords": [10.84, 4.76], "risk_level": "elevated", "notes": "Kidnapping area"},
+        "Sakaba": {"coords": [11.15, 4.50], "risk_level": "elevated", "notes": "Highway risk zone"},
+        "Ngaski": {"coords": [11.27, 4.55], "risk_level": "moderate", "notes": "Occasional incidents"}
+      },
+      "key_corridors": [
+        "Wasagu-Danko corridor",
+        "Zuru-Zamfara border zone"
+      ],
+      "forest_areas": []
+    }
+  },
+  "cross_border_corridors": [
+    {
+      "name": "Zamfara-Katsina-Niger Republic Triangle",
+      "description": "Primary arms and fighters transit corridor",
+      "states": ["Zamfara", "Katsina"],
+      "risk": "critical"
+    },
+    {
+      "name": "Zamfara-Kaduna Forest Belt",
+      "description": "Major bandit enclave spanning Birnin Gwari to Zamfara forests",
+      "states": ["Zamfara", "Kaduna"],
+      "risk": "critical"
+    },
+    {
+      "name": "Eastern Sokoto-Zamfara Border",
+      "description": "Cross-state cattle rustling and raiding route",
+      "states": ["Sokoto", "Zamfara"],
+      "risk": "high"
+    },
+    {
+      "name": "Niger-Kaduna Convergence Zone",
+      "description": "Shiroro-Kaduna southern fringe, bandit-terrorist overlap",
+      "states": ["Niger", "Kaduna"],
+      "risk": "high"
+    },
+    {
+      "name": "Kebbi-Zamfara Spillover Corridor",
+      "description": "Bandit operations extending from Zamfara into Kebbi",
+      "states": ["Kebbi", "Zamfara"],
+      "risk": "elevated"
+    }
+  ]
+}

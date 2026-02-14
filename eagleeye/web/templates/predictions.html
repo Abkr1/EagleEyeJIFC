@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+{% block title %}Predictions{% endblock %}
+{% block page_title %}Activity Predictions{% endblock %}
+
+{% block content %}
+<div class="grid grid-2">
+    <!-- Controls -->
+    <div class="card">
+        <div class="card-header"><div class="card-title">Model Control</div></div>
+        <div id="modelStatus" style="margin-bottom:16px"></div>
+        <button class="btn btn-primary" onclick="trainModel()" id="trainBtn">Train Model on Historical Data</button>
+        <div id="trainResult" style="margin-top:12px"></div>
+    </div>
+    <div class="card">
+        <div class="card-header"><div class="card-title">Generate Forecast</div></div>
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Target State</label>
+                <select class="form-control" id="predState">
+                    <option value="">All States</option>
+                    <option>Zamfara</option><option>Kaduna</option><option>Katsina</option>
+                    <option>Sokoto</option><option>Niger</option><option>Kebbi</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Horizon (days)</label>
+                <select class="form-control" id="predHorizon">
+                    <option value="7">7 Days</option>
+                    <option value="14" selected>14 Days</option>
+                    <option value="30">30 Days</option>
+                </select>
+            </div>
+        </div>
+        <button class="btn btn-primary" onclick="runForecast()" id="forecastBtn">Generate Forecast</button>
+    </div>
+</div>
+
+<!-- Forecast Results -->
+<div id="forecastResults" style="margin-top:20px;display:none">
+    <div class="grid grid-2">
+        <div class="card">
+            <div class="card-header"><div class="card-title">Threat Level Forecast</div></div>
+            <div class="chart-container"><canvas id="forecastChart"></canvas></div>
+        </div>
+        <div class="card">
+            <div class="card-header"><div class="card-title">Predicted Incident Types</div></div>
+            <div class="chart-container"><canvas id="typeChart"></canvas></div>
+        </div>
+    </div>
+
+    <div class="card" style="margin-top:20px">
+        <div class="card-header">
+            <div class="card-title">Day-by-Day Forecast</div>
+        </div>
+        <div id="dayByDay"></div>
+    </div>
+
+    <div class="card" style="margin-top:20px">
+        <div class="card-header"><div class="card-title">Recommendations</div></div>
+        <div id="recommendations"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let fcCharts = {};
+
+document.addEventListener('DOMContentLoaded', () => { checkModelStatus(); });
+
+async function checkModelStatus() {
+    const data = await api('/api/status');
+    if (!data) return;
+    const el = document.getElementById('modelStatus');
+    if (data.model_trained) {
+        const stats = data.model_stats || {};
+        el.innerHTML = `
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                <span class="status-dot" style="background:var(--success)"></span>
+                <span style="color:var(--success);font-weight:600">Model Trained</span>
+            </div>
+            <div style="font-size:12px;color:var(--text-muted)">
+                Type accuracy: ${((stats.type_model_accuracy || 0) * 100).toFixed(1)}% &middot;
+                Location accuracy: ${((stats.location_model_accuracy || 0) * 100).toFixed(1)}% &middot;
+                Samples: ${stats.training_samples || 0}
+            </div>`;
+    } else {
+        el.innerHTML = `
+            <div style="display:flex;align-items:center;gap:8px">
+                <span class="status-dot" style="background:var(--warning)"></span>
+                <span style="color:var(--warning);font-weight:600">Model Not Trained</span>
+            </div>
+            <div style="font-size:12px;color:var(--text-muted)">Train the model first to generate predictions</div>`;
+    }
+}
+
+async function trainModel() {
+    const btn = document.getElementById('trainBtn');
+    btn.disabled = true; btn.textContent = 'Training...';
+    const result = await api('/api/predict/train', 'POST');
+    btn.disabled = false; btn.textContent = 'Train Model on Historical Data';
+
+    const el = document.getElementById('trainResult');
+    if (result && result.status === 'success') {
+        let perClassHtml = '';
+        if (result.type_model_per_class_f1) {
+            const entries = Object.entries(result.type_model_per_class_f1)
+                .sort((a, b) => b[1] - a[1]);
+            perClassHtml = `
+                <div style="margin-top:10px;font-size:12px;color:var(--text-secondary)">
+                    <div style="font-weight:600;margin-bottom:6px">Per-Class F1 Scores:</div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:4px">
+                        ${entries.map(([cls, f1]) => {
+                            const pct = (f1 * 100).toFixed(0);
+                            const color = f1 >= 0.5 ? 'var(--success)' : f1 >= 0.3 ? 'var(--warning)' : 'var(--danger)';
+                            return `<div style="display:flex;align-items:center;gap:6px">
+                                <span style="width:140px;overflow:hidden;text-overflow:ellipsis">${cls.replace(/_/g,' ')}</span>
+                                <div style="flex:1;height:6px;background:rgba(255,255,255,.05);border-radius:3px;overflow:hidden">
+                                    <div style="width:${pct}%;height:100%;background:${color};border-radius:3px"></div>
+                                </div>
+                                <span style="width:35px;text-align:right;color:${color}">${pct}%</span>
+                            </div>`;
+                        }).join('')}
+                    </div>
+                </div>`;
+        }
+        el.innerHTML = `
+            <div style="padding:12px;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);border-radius:var(--radius-sm)">
+                <div style="font-weight:600;color:var(--success)">Training Complete (v${result.model_version || '?'})</div>
+                <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">
+                    Type accuracy: ${(result.type_model_accuracy * 100).toFixed(1)}% |
+                    Macro F1: ${((result.type_model_macro_f1 || 0) * 100).toFixed(1)}% |
+                    Location accuracy: ${(result.location_model_accuracy * 100).toFixed(1)}% |
+                    Samples: ${result.training_samples}
+                </div>
+                ${perClassHtml}
+            </div>`;
+        showToast('Model trained successfully', 'success');
+        checkModelStatus();
+    } else {
+        el.innerHTML = `<div style="padding:12px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:var(--radius-sm);color:var(--danger)">
+            Training failed: ${result?.message || result?.detail || 'Unknown error'}</div>`;
+        showToast('Training failed', 'error');
+    }
+}
+
+async function runForecast() {
+    const btn = document.getElementById('forecastBtn');
+    btn.disabled = true; btn.textContent = 'Generating...';
+
+    const state = document.getElementById('predState').value;
+    const horizon = document.getElementById('predHorizon').value;
+    let url = `/api/predict/forecast?horizon_days=${horizon}`;
+    if (state) url += `&state=${state}`;
+
+    const data = await api(url, 'POST');
+    btn.disabled = false; btn.textContent = 'Generate Forecast';
+
+    if (!data || !data.predictions) {
+        showToast(data?.detail || 'Forecast failed', 'error');
+        return;
+    }
+
+    document.getElementById('forecastResults').style.display = 'block';
+    renderForecast(data.predictions);
+}
+
+function renderForecast(predictions) {
+    // Threat level timeline chart
+    if (fcCharts.forecast) fcCharts.forecast.destroy();
+    const ctx = document.getElementById('forecastChart').getContext('2d');
+    fcCharts.forecast = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: predictions.map(p => p.prediction_date.substring(5, 10)),
+            datasets: [{
+                label: 'Threat Level',
+                data: predictions.map(p => p.threat_level),
+                borderColor: '#ef4444',
+                backgroundColor: 'rgba(239,68,68,.1)',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 4,
+                pointBackgroundColor: predictions.map(p => getThreatColor(p.threat_level)),
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            scales: {
+                y: { min: 0, max: 6, ticks: { color: '#5c6f7e', stepSize: 1, callback: v => ['','LOW','MOD','ELEV','HIGH','CRIT'][v] || '' }, grid: { color: 'rgba(42,63,82,.3)' } },
+                x: { ticks: { color: '#5c6f7e' }, grid: { color: 'rgba(42,63,82,.3)' } }
+            },
+            plugins: { legend: { labels: { color: '#8899a6' } } }
+        }
+    });
+
+    // Predicted types pie
+    const typeCounts = {};
+    predictions.forEach(p => {
+        if (p.predicted_incident_types && p.predicted_incident_types[0]) {
+            const t = p.predicted_incident_types[0].type;
+            typeCounts[t] = (typeCounts[t] || 0) + 1;
+        }
+    });
+    if (fcCharts.types) fcCharts.types.destroy();
+    const ctx2 = document.getElementById('typeChart').getContext('2d');
+    const typeLabels = Object.keys(typeCounts);
+    const typeColors = ['#ef4444','#f97316','#f59e0b','#10b981','#06b6d4','#3b82f6','#8b5cf6'];
+    fcCharts.types = new Chart(ctx2, {
+        type: 'doughnut',
+        data: {
+            labels: typeLabels.map(formatType),
+            datasets: [{
+                data: Object.values(typeCounts),
+                backgroundColor: typeColors.slice(0, typeLabels.length),
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { position: 'right', labels: { color: '#8899a6', font: { size: 11 } } } }
+        }
+    });
+
+    // Day by day
+    document.getElementById('dayByDay').innerHTML = predictions.map(p => {
+        const topType = p.predicted_incident_types?.[0] || {};
+        const prob = topType.probability || 0;
+        const color = getThreatColor(p.threat_level);
+        return `<div class="prediction-day">
+            <div class="pred-date">${p.prediction_date.substring(0, 10)}</div>
+            <span class="threat-label ${p.threat_label}" style="width:70px;text-align:center">${p.threat_label}</span>
+            <div class="pred-bar">
+                <div class="pred-bar-fill" style="width:${prob * 100}%;background:${color}"></div>
+            </div>
+            <div class="pred-type">${formatType(topType.type || '—')} (${(prob * 100).toFixed(0)}%)</div>
+        </div>`;
+    }).join('');
+
+    // Recommendations
+    const allRecs = new Set();
+    predictions.forEach(p => (p.recommendations || []).forEach(r => allRecs.add(r)));
+    document.getElementById('recommendations').innerHTML = allRecs.size ?
+        [...allRecs].map(r => `<div style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px">&#8226; ${r}</div>`).join('') :
+        '<div style="padding:20px;color:var(--text-muted)">No specific recommendations</div>';
+}
+</script>
+{% endblock %}

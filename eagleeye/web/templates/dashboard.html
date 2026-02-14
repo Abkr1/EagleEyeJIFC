@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+<!-- Threat Level Cards -->
+<div class="section-header">
+    <div class="section-title">State Threat Levels</div>
+</div>
+<div class="grid grid-6" id="threatCards" style="margin-bottom:24px">
+    <div class="loading"><div class="spinner"></div> Loading threat data...</div>
+</div>
+
+<!-- Incident Timeline -->
+<div class="card">
+    <div class="card-header">
+        <div class="card-title">Incident Timeline (Last 6 Months)</div>
+    </div>
+    <div class="chart-container">
+        <canvas id="timelineChart"></canvas>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    loadDashboard();
+});
+
+async function loadDashboard() {
+    // Load threat scores
+    const scores = await api('/api/threat/scores');
+    if (scores && scores.scores) {
+        renderThreatCards(scores.scores);
+    } else {
+        document.getElementById('threatCards').innerHTML =
+            '<div class="empty-state"><div class="empty-state-text">No threat data yet</div><div class="empty-state-hint">Ingest incident data to see threat assessments</div></div>';
+    }
+
+    // Load recent incidents for timeline
+    const incidents = await api('/api/incidents?days=180');
+    if (incidents && incidents.incidents && incidents.incidents.length > 0) {
+        renderTimelineChart(incidents.incidents);
+    }
+}
+
+function renderThreatCards(scores) {
+    const container = document.getElementById('threatCards');
+    if (!scores.length) {
+        container.innerHTML = '<div class="empty-state"><div class="empty-state-text">No data</div></div>';
+        return;
+    }
+    container.innerHTML = scores.map(s => `
+        <div class="threat-card level-${s.threat_level}">
+            <div class="state-name">${s.state}</div>
+            <span class="threat-label ${s.threat_label}">${s.threat_label}</span>
+            <div class="threat-score">${s.overall_score}</div>
+            <div class="threat-details">
+                30d: ${s.incidents_last_30d || 0} incidents &middot;
+                90d: ${s.incidents_last_90d || 0}
+            </div>
+        </div>
+    `).join('');
+}
+
+function renderTimelineChart(incidents) {
+    const monthly = {};
+    incidents.forEach(i => {
+        const d = new Date(i.date);
+        const key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+        if (!monthly[key]) monthly[key] = {count: 0, killed: 0, kidnapped: 0};
+        monthly[key].count++;
+        monthly[key].killed += i.casualties_killed || 0;
+        monthly[key].kidnapped += i.kidnapped_count || 0;
+    });
+
+    const labels = Object.keys(monthly).sort();
+    const ctx = document.getElementById('timelineChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Incidents',
+                    data: labels.map(l => monthly[l].count),
+                    backgroundColor: 'rgba(59,130,246,.6)',
+                    borderRadius: 4,
+                },
+                {
+                    label: 'Killed',
+                    data: labels.map(l => monthly[l].killed),
+                    backgroundColor: 'rgba(239,68,68,.6)',
+                    borderRadius: 4,
+                },
+                {
+                    label: 'Kidnapped',
+                    data: labels.map(l => monthly[l].kidnapped),
+                    backgroundColor: 'rgba(245,158,11,.6)',
+                    borderRadius: 4,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { labels: { color: '#8899a6', font: { size: 11 } } }
+            },
+            scales: {
+                x: { ticks: { color: '#5c6f7e' }, grid: { color: 'rgba(42,63,82,.3)' } },
+                y: { ticks: { color: '#5c6f7e' }, grid: { color: 'rgba(42,63,82,.3)' } }
+            }
+        }
+    });
+}
+</script>
+{% endblock %}

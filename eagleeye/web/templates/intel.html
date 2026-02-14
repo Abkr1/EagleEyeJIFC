@@ -1,0 +1,383 @@
+{% extends "base.html" %}
+{% block title %}Intel Reports{% endblock %}
+{% block page_title %}Intelligence Report Submission{% endblock %}
+
+{% block content %}
+<div class="grid grid-2">
+    <!-- Submit Report -->
+    <div class="card">
+        <div class="card-header"><div class="card-title">Submit Intelligence Report</div></div>
+        <p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px">
+            Paste a security report, news article, or field report below. The AI engine will automatically
+            extract incidents, locations, casualties, weapons, and group details.
+        </p>
+        <form onsubmit="submitReport(event)">
+            <div class="form-group">
+                <label class="form-label">Report Title (optional)</label>
+                <input type="text" class="form-control" id="reportTitle" placeholder="e.g., Daily Trust — Zamfara bandits attack">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Report Content *</label>
+                <textarea class="form-control" id="reportContent" rows="10"
+                    placeholder="Paste the full text of the security report here...&#10;&#10;Example: Armed bandits attacked Badarawa village in Anka Local Government Area of Zamfara State on Monday. The gunmen, numbering about 50, arrived on motorcycles and killed 12 people, injured 8 others, and kidnapped 25 residents. They also rustled over 200 cattle."
+                    required></textarea>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Source</label>
+                    <input type="text" class="form-control" id="reportSource" placeholder="e.g., Daily Trust, Field Report">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Source URL (optional)</label>
+                    <input type="url" class="form-control" id="reportUrl" placeholder="https://...">
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-lg" id="submitReportBtn">
+                Process Report
+            </button>
+        </form>
+    </div>
+
+    <!-- Results -->
+    <div class="card">
+        <div class="card-header"><div class="card-title">Extraction Results</div></div>
+        <div id="extractionResults">
+            <div class="empty-state" style="padding:40px 20px">
+                <div class="empty-state-icon">&#128196;</div>
+                <div class="empty-state-text">Submit a report to see extracted data</div>
+                <div class="empty-state-hint">The NLP engine extracts locations, incident types, casualties, weapons, vehicles, and group sizes.</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Upload Word Documents -->
+<div class="card" style="margin-top:20px">
+    <div class="card-header"><div class="card-title">Upload Training Reports</div></div>
+    <p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px">
+        Upload Word documents (.docx) or text files containing security reports.
+        Each document will be parsed by the NLP engine to extract incidents for model training.
+    </p>
+    <div id="dropZone" style="border:2px dashed var(--border);border-radius:var(--radius-sm);padding:40px 20px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s"
+         ondragover="event.preventDefault();this.style.borderColor='var(--accent)';this.style.background='rgba(59,130,246,.05)'"
+         ondragleave="this.style.borderColor='var(--border)';this.style.background='transparent'"
+         ondrop="handleDrop(event)"
+         onclick="document.getElementById('fileInput').click()">
+        <div style="font-size:36px;margin-bottom:8px">&#128195;</div>
+        <div style="font-weight:600;color:var(--text-primary);margin-bottom:4px">Drag & drop Word documents here</div>
+        <div style="font-size:12px;color:var(--text-muted)">or click to browse &mdash; accepts .docx and .txt files</div>
+        <input type="file" id="fileInput" multiple accept=".docx,.txt" style="display:none" onchange="handleFiles(this.files)">
+    </div>
+    <div id="fileList" style="margin-top:12px"></div>
+    <button class="btn btn-primary btn-lg" id="uploadBtn" style="margin-top:12px;display:none" onclick="uploadFiles()">
+        Upload &amp; Process
+    </button>
+    <div id="uploadResults" style="margin-top:16px"></div>
+</div>
+
+<!-- Stored Reports & Reprocessing -->
+<div class="card" style="margin-top:20px">
+    <div class="card-header">
+        <div class="card-title">Stored Reports</div>
+        <div style="display:flex;gap:8px">
+            <button class="btn btn-secondary" onclick="loadStoredReports()" id="refreshReportsBtn">Refresh</button>
+            <button class="btn btn-primary" onclick="reprocessReports()" id="reprocessBtn">Reprocess All Reports</button>
+        </div>
+    </div>
+    <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">
+        All uploaded and submitted reports are saved in the database. Use <strong>Reprocess All Reports</strong>
+        to re-parse every stored report through the latest NLP engine &mdash; this will extract
+        any incidents the previous parser may have missed.
+    </p>
+    <div id="storedReportsContainer">
+        <div style="color:var(--text-muted);font-size:13px;padding:12px 0">Click Refresh to load stored reports.</div>
+    </div>
+    <div id="reprocessResults" style="margin-top:12px"></div>
+</div>
+
+<!-- Automated Collection -->
+<div class="card" style="margin-top:20px">
+    <div class="card-header">
+        <div class="card-title">Automated News Collection</div>
+        <button class="btn btn-secondary" onclick="runCollection()" id="collectBtn">Run Collection Cycle</button>
+    </div>
+    <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">
+        Automatically collect security-related articles from Nigerian news sources
+        (Premium Times, Daily Trust, The Cable, Sahara Reporters, Punch, Vanguard, Channels TV),
+        parse them for incidents, and store results in the database.
+    </p>
+    <div id="collectionResults"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function submitReport(e) {
+    e.preventDefault();
+    const btn = document.getElementById('submitReportBtn');
+    btn.disabled = true; btn.textContent = 'Processing...';
+
+    const payload = {
+        title: document.getElementById('reportTitle').value || null,
+        content: document.getElementById('reportContent').value,
+        source: document.getElementById('reportSource').value || null,
+        source_url: document.getElementById('reportUrl').value || null,
+    };
+
+    const result = await api('/api/intel/report', 'POST', payload);
+    btn.disabled = false; btn.textContent = 'Process Report';
+
+    const container = document.getElementById('extractionResults');
+    if (result && result.incidents_extracted > 0) {
+        // Determine parser used (all incidents from same parse call)
+        const parserUsed = result.incidents[0] && result.incidents[0].parser;
+        const parserLabel = parserUsed === 'claude'
+            ? '<span style="display:inline-block;font-size:10px;padding:2px 8px;background:rgba(59,130,246,.15);color:var(--accent);border-radius:10px;font-weight:600;margin-left:8px">JIFC AI</span>'
+            : '<span style="display:inline-block;font-size:10px;padding:2px 8px;background:rgba(245,158,11,.15);color:var(--warning);border-radius:10px;font-weight:600;margin-left:8px">Regex NLP</span>';
+
+        showToast(`Extracted ${result.incidents_extracted} incident(s)`, 'success');
+        container.innerHTML = `
+            <div style="padding:12px;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);border-radius:var(--radius-sm);margin-bottom:16px">
+                <span style="color:var(--success);font-weight:600">${result.incidents_extracted} incident(s) extracted and stored</span>
+                ${parserLabel}
+            </div>
+            ${result.incidents.map(inc => `
+                <div style="padding:12px;border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:8px">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                        <span class="badge ${getBadgeClass(inc.incident_type)}" style="font-size:12px">${formatType(inc.incident_type)}</span>
+                        <span style="font-size:12px;color:var(--text-muted)">ID: ${inc.id}</span>
+                    </div>
+                    <table class="data-table">
+                        <tr><td style="color:var(--text-muted);width:120px">State</td><td style="font-weight:600">${inc.state}</td></tr>
+                        ${inc.lga ? `<tr><td style="color:var(--text-muted)">LGA</td><td>${inc.lga}</td></tr>` : ''}
+                        ${inc.location_name ? `<tr><td style="color:var(--text-muted)">Location</td><td>${inc.location_name}</td></tr>` : ''}
+                        <tr><td style="color:var(--text-muted)">Date</td><td>${formatDate(inc.date)}</td></tr>
+                        <tr><td style="color:var(--text-muted)">Killed</td><td>${inc.casualties_killed || 0}</td></tr>
+                        <tr><td style="color:var(--text-muted)">Injured</td><td>${inc.casualties_injured || 0}</td></tr>
+                        <tr><td style="color:var(--text-muted)">Kidnapped</td><td>${inc.kidnapped_count || 0}</td></tr>
+                        <tr><td style="color:var(--text-muted)">Confidence</td><td>${inc.confidence_score ? (inc.confidence_score * 100).toFixed(0) + '%' : '—'}</td></tr>
+                    </table>
+                </div>
+            `).join('')}`;
+    } else if (result && result.incidents_extracted === 0) {
+        container.innerHTML = `
+            <div style="padding:16px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:var(--radius-sm)">
+                <div style="font-weight:600;color:var(--warning)">No incidents extracted</div>
+                <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">
+                    The report may not contain identifiable security incidents in the target states,
+                    or the content format wasn't recognized. Try a more detailed report.
+                </div>
+            </div>`;
+    } else {
+        container.innerHTML = `<div style="padding:16px;color:var(--danger)">Processing failed. Check the report content.</div>`;
+    }
+}
+
+// --- File Upload ---
+let pendingFiles = [];
+
+function handleDrop(e) {
+    e.preventDefault();
+    const zone = document.getElementById('dropZone');
+    zone.style.borderColor = 'var(--border)';
+    zone.style.background = 'transparent';
+    handleFiles(e.dataTransfer.files);
+}
+
+function handleFiles(fileListObj) {
+    const allowed = ['.docx', '.txt'];
+    for (const f of fileListObj) {
+        const ext = f.name.substring(f.name.lastIndexOf('.')).toLowerCase();
+        if (allowed.includes(ext)) {
+            pendingFiles.push(f);
+        } else {
+            showToast(`Skipped "${f.name}" — only .docx and .txt files accepted`, 'error');
+        }
+    }
+    renderFileList();
+}
+
+function removeFile(idx) {
+    pendingFiles.splice(idx, 1);
+    renderFileList();
+}
+
+function renderFileList() {
+    const container = document.getElementById('fileList');
+    const btn = document.getElementById('uploadBtn');
+    if (!pendingFiles.length) {
+        container.innerHTML = '';
+        btn.style.display = 'none';
+        return;
+    }
+    btn.style.display = 'inline-block';
+    container.innerHTML = pendingFiles.map((f, i) => `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:4px">
+            <span style="font-size:13px;color:var(--text-primary)">&#128196; ${f.name} <span style="color:var(--text-muted)">(${(f.size/1024).toFixed(1)} KB)</span></span>
+            <button class="btn btn-secondary" style="padding:2px 8px;font-size:11px" onclick="removeFile(${i})">Remove</button>
+        </div>
+    `).join('');
+}
+
+async function uploadFiles() {
+    if (!pendingFiles.length) return;
+    const btn = document.getElementById('uploadBtn');
+    btn.disabled = true;
+    btn.textContent = 'Processing...';
+    const resultsContainer = document.getElementById('uploadResults');
+    resultsContainer.innerHTML = '';
+
+    let totalIncidents = 0;
+    const fileResults = [];
+
+    for (const file of pendingFiles) {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const resp = await fetch('/api/intel/upload', { method: 'POST', body: formData });
+            const result = await resp.json();
+            if (resp.ok) {
+                totalIncidents += result.incidents_extracted || 0;
+                fileResults.push({ name: file.name, success: true, result });
+            } else {
+                fileResults.push({ name: file.name, success: false, error: result.detail || 'Processing failed' });
+            }
+        } catch (err) {
+            fileResults.push({ name: file.name, success: false, error: err.message });
+        }
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'Upload & Process';
+
+    if (totalIncidents > 0) {
+        showToast(`Extracted ${totalIncidents} incident(s) from ${fileResults.filter(r=>r.success).length} file(s)`, 'success');
+    }
+
+    resultsContainer.innerHTML = `
+        <div style="padding:12px;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.3);border-radius:var(--radius-sm);margin-bottom:12px">
+            <span style="font-weight:600;color:var(--accent)">${fileResults.length} file(s) processed &mdash; ${totalIncidents} total incident(s) extracted</span>
+        </div>
+        ${fileResults.map(fr => {
+            if (fr.success) {
+                const r = fr.result;
+                return `
+                <div style="padding:12px;border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:6px">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                        <span style="font-weight:600;color:var(--text-primary)">&#128196; ${fr.name}</span>
+                        <span style="font-size:12px;color:var(--text-muted)">${r.text_length} chars extracted</span>
+                    </div>
+                    ${r.incidents_extracted > 0 ? `
+                        <div style="color:var(--success);font-size:13px;margin-bottom:6px">${r.incidents_extracted} incident(s) extracted and stored</div>
+                        ${r.incidents.map(inc => `
+                            <div style="display:inline-block;margin:2px 4px 2px 0">
+                                <span class="badge ${getBadgeClass(inc.incident_type)}" style="font-size:11px">${formatType(inc.incident_type)}</span>
+                                <span style="font-size:11px;color:var(--text-muted)">${inc.state}</span>
+                            </div>
+                        `).join('')}
+                    ` : '<div style="color:var(--warning);font-size:13px">No incidents found in this document</div>'}
+                </div>`;
+            } else {
+                return `
+                <div style="padding:12px;border:1px solid rgba(239,68,68,.3);border-radius:var(--radius-sm);margin-bottom:6px;background:rgba(239,68,68,.05)">
+                    <span style="font-weight:600;color:var(--danger)">&#128196; ${fr.name}</span>
+                    <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">${fr.error}</div>
+                </div>`;
+            }
+        }).join('')}`;
+
+    pendingFiles = [];
+    renderFileList();
+}
+
+// --- Stored Reports & Reprocessing ---
+async function loadStoredReports() {
+    const container = document.getElementById('storedReportsContainer');
+    container.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:8px 0"><div class="spinner" style="display:inline-block;width:14px;height:14px;margin-right:6px"></div>Loading...</div>';
+
+    const data = await api('/api/intel/reports');
+    if (!data || !data.reports || data.reports.length === 0) {
+        container.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:12px 0">No stored reports yet. Upload documents or submit reports above to build the report archive.</div>';
+        return;
+    }
+
+    container.innerHTML = `
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:8px">${data.total} report(s) stored</div>
+        <div style="max-height:300px;overflow-y:auto">
+            <table class="data-table">
+                <thead><tr>
+                    <th>ID</th><th>Title / Source</th><th>Content</th><th>Incidents</th><th>Date</th><th>Status</th>
+                </tr></thead>
+                <tbody>
+                    ${data.reports.map(r => `<tr>
+                        <td>${r.id}</td>
+                        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.title || r.source || '—'}</td>
+                        <td>${(r.content_length/1024).toFixed(1)} KB</td>
+                        <td>${r.extracted_incidents_count || 0}</td>
+                        <td>${r.ingested_at ? formatDate(r.ingested_at) : '—'}</td>
+                        <td><span class="badge ${r.processed ? 'badge-success' : 'badge-warning'}" style="font-size:11px">${r.processed ? 'Processed' : 'Pending'}</span></td>
+                    </tr>`).join('')}
+                </tbody>
+            </table>
+        </div>`;
+}
+
+async function reprocessReports() {
+    const btn = document.getElementById('reprocessBtn');
+    btn.disabled = true; btn.textContent = 'Reprocessing...';
+    const container = document.getElementById('reprocessResults');
+    container.innerHTML = '';
+
+    const result = await api('/api/intel/reprocess', 'POST');
+    btn.disabled = false; btn.textContent = 'Reprocess All Reports';
+
+    if (result && result.status === 'completed') {
+        showToast(`Reprocessed ${result.reports_reprocessed} report(s), extracted ${result.total_new_incidents} incident(s)`, 'success');
+        container.innerHTML = `
+            <div style="padding:12px;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);border-radius:var(--radius-sm);margin-bottom:8px">
+                <div style="font-weight:600;color:var(--success)">${result.reports_reprocessed} report(s) reprocessed &mdash; ${result.total_new_incidents} new incident(s) extracted</div>
+            </div>
+            ${result.results.map(r => `
+                <div style="padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:4px;display:flex;justify-content:space-between;align-items:center">
+                    <span style="font-size:13px">Report #${r.report_id}: ${r.title || '—'}</span>
+                    <span style="font-size:12px;color:${r.incidents_extracted > 0 ? 'var(--success)' : 'var(--text-muted)'}">${r.incidents_extracted} incident(s)</span>
+                </div>
+            `).join('')}`;
+        loadStoredReports();
+    } else if (result && result.status === 'no_reports') {
+        container.innerHTML = '<div style="padding:12px;color:var(--warning)">No stored reports to reprocess. Upload documents first.</div>';
+    } else {
+        container.innerHTML = '<div style="padding:12px;color:var(--danger)">Reprocessing failed.</div>';
+    }
+}
+
+async function runCollection() {
+    const btn = document.getElementById('collectBtn');
+    btn.disabled = true; btn.textContent = 'Collecting...';
+
+    const result = await api('/api/intel/collect', 'POST');
+    btn.disabled = false; btn.textContent = 'Run Collection Cycle';
+
+    const container = document.getElementById('collectionResults');
+    if (result && result.stats) {
+        const s = result.stats;
+        container.innerHTML = `
+            <div style="padding:12px;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.3);border-radius:var(--radius-sm)">
+                <div style="font-weight:600;color:var(--accent)">Collection Complete</div>
+                <div style="font-size:12px;color:var(--text-secondary);margin-top:6px">
+                    Articles collected: ${s.articles_collected} &middot;
+                    Articles parsed: ${s.articles_parsed} &middot;
+                    Incidents extracted: ${s.incidents_extracted} &middot;
+                    Incidents stored: ${s.incidents_stored}
+                </div>
+            </div>`;
+        if (s.incidents_stored > 0) {
+            showToast(`Stored ${s.incidents_stored} new incidents`, 'success');
+        }
+    } else {
+        container.innerHTML = '<div style="padding:12px;color:var(--warning)">Collection completed with no results or sources were unreachable.</div>';
+    }
+}
+</script>
+{% endblock %}

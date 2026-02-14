@@ -1,0 +1,1004 @@
+{% extends "base.html" %}
+{% block title %}Reports{% endblock %}
+{% block page_title %}Intelligence Reports{% endblock %}
+
+{% block content %}
+<div class="tabs">
+    <button class="tab active" onclick="switchTab(this,'analysisPanel')">Analysis</button>
+    <button class="tab" onclick="switchTab(this,'sitrepPanel')">Situation Report</button>
+    <button class="tab" onclick="switchTab(this,'briefingPanel')">Threat Briefing</button>
+    <button class="tab" onclick="switchTab(this,'areaBriefingPanel'); setTimeout(()=>{ initAreaMap(); if(areaMapInstance) areaMapInstance.invalidateSize(); }, 150)">Area Threat Briefing</button>
+    <button class="tab" onclick="switchTab(this,'outlookPanel')">Predictive Outlook</button>
+</div>
+
+<!-- Report Analysis -->
+<div class="tab-panel active" id="analysisPanel">
+    <div class="card">
+        <h3 style="margin-bottom:16px">Comprehensive Report Analysis</h3>
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:20px">
+            Upload a report (.docx, .txt, or .pdf) and EagleEye AI will perform a comprehensive intelligence analysis
+            covering key events, threat assessment, patterns, actor analysis, and actionable recommendations.
+        </p>
+
+        <div id="analysisDropZone" style="border:2px dashed var(--border);border-radius:var(--radius-sm);padding:32px;text-align:center;cursor:pointer;transition:border-color .2s;margin-bottom:16px"
+            onclick="document.getElementById('analysisFileInput').click()"
+            ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
+            ondragleave="this.style.borderColor='var(--border)'"
+            ondrop="handleAnalysisDrop(event)">
+            <div style="font-size:32px;margin-bottom:8px;color:var(--text-muted)">&#128196;</div>
+            <div style="font-size:14px;font-weight:600;color:var(--text-secondary);margin-bottom:4px">
+                Drop report here or click to upload
+            </div>
+            <div style="font-size:12px;color:var(--text-muted)">
+                Supported: .docx, .txt, .pdf
+            </div>
+            <input type="file" id="analysisFileInput" accept=".docx,.txt,.pdf"
+                style="display:none" onchange="selectAnalysisFile(this.files)">
+        </div>
+
+        <div id="analysisFileInfo" style="display:none;margin-bottom:16px;padding:10px 14px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-sm);display:flex;align-items:center;gap:10px">
+        </div>
+
+        <button class="btn btn-primary btn-lg" id="analyzeBtn" onclick="runReportAnalysis()" disabled style="margin-bottom:20px">
+            Analyze Report
+        </button>
+
+        <div id="analysisOutput">
+            <div class="empty-state" style="padding:40px">
+                <div class="empty-state-icon">&#128269;</div>
+                <div class="empty-state-text">Upload a Report to Analyze</div>
+                <div class="empty-state-hint">AI-powered comprehensive analysis of security reports, field documents, and intelligence files</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- SITREP -->
+<div class="tab-panel" id="sitrepPanel">
+    <div class="card">
+        <h3 style="margin-bottom:8px">Situation Report (SITREP)</h3>
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:20px">
+            Upload a report (.docx, .txt, or .pdf) as the basis for generating a structured SITREP.
+        </p>
+
+        <!-- Report upload -->
+        <div id="sitrepDropZone" style="border:2px dashed var(--border);border-radius:var(--radius-sm);padding:24px;text-align:center;cursor:pointer;transition:border-color .2s;margin-bottom:16px"
+            onclick="document.getElementById('sitrepFileInput').click()"
+            ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
+            ondragleave="this.style.borderColor='var(--border)'"
+            ondrop="handleSitrepDrop(event)">
+            <div style="font-size:24px;margin-bottom:6px;color:var(--text-muted)">&#128196;</div>
+            <div style="font-size:13px;font-weight:600;color:var(--text-secondary);margin-bottom:4px">
+                Drop report here or click to upload
+            </div>
+            <div style="font-size:12px;color:var(--text-muted)">Supported: .docx, .txt, .pdf</div>
+            <input type="file" id="sitrepFileInput" accept=".docx,.txt,.pdf"
+                style="display:none" onchange="selectSitrepFile(this.files)">
+        </div>
+
+        <div id="sitrepFileInfo" style="display:none;margin-bottom:16px;padding:10px 14px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-sm)">
+        </div>
+
+        <!-- Optional: SITREP template -->
+        <div style="margin-bottom:16px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+                <label style="display:flex;gap:4px;align-items:center;cursor:pointer;font-size:13px;color:var(--text-secondary)">
+                    <input type="checkbox" id="useSitrepTemplate" onchange="toggleTemplateArea()"> Use custom SITREP template
+                </label>
+                <div style="display:flex;gap:8px;align-items:center">
+                    <span id="templateSaveStatus" style="font-size:11px;color:var(--success);display:none">Saved</span>
+                </div>
+            </div>
+            <div id="templateArea" style="display:none">
+                <div style="display:flex;align-items:center;justify-content:flex-end;margin-bottom:4px;gap:8px">
+                    <button class="btn" style="font-size:11px;padding:3px 10px" onclick="saveTemplate()">Save Template</button>
+                    <button class="btn" style="font-size:11px;padding:3px 10px;color:var(--text-muted)" onclick="clearSavedTemplate()">Clear Saved</button>
+                </div>
+                <textarea class="form-control" id="sitrepTemplate" rows="10"
+                    style="font-family:monospace;font-size:12px;line-height:1.6;resize:vertical"
+                    placeholder="Paste your SITREP template here. The AI will follow this structure exactly.
+
+SITUATION REPORT (SITREP)
+DTG: [Date-Time Group]
+Classification: RESTRICTED
+
+1. SITUATION
+   a. General: [Overall security situation summary]
+   b. Enemy Forces: [Bandit activity summary]
+
+2. KEY EVENTS
+   [List of significant incidents]
+
+3. THREAT ASSESSMENT
+   [Threat levels and trends]
+
+4. CASUALTIES & IMPACT
+   [Figures from the report]
+
+5. RECOMMENDATIONS
+   [Actionable recommendations]
+
+6. OUTLOOK
+   [Forward-looking assessment]"></textarea>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:4px">
+                    JIFC AI will follow your template structure exactly, filling in data from the uploaded report.
+                </div>
+            </div>
+        </div>
+
+        <button class="btn btn-primary btn-lg" id="sitrepBtn" onclick="generateSitrep()" disabled>
+            Generate SITREP
+        </button>
+
+        <div id="sitrepOutput" style="margin-top:20px">
+            <div class="empty-state" style="padding:40px">
+                <div class="empty-state-icon">&#128203;</div>
+                <div class="empty-state-text">Upload a Report to Generate SITREP</div>
+                <div class="empty-state-hint">AI will produce a structured situation report based on the uploaded document</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Threat Briefing (State) -->
+<div class="tab-panel" id="briefingPanel">
+    <div class="card">
+        <div style="display:flex;gap:12px;align-items:end;margin-bottom:20px">
+            <div class="form-group" style="margin-bottom:0">
+                <label class="form-label">State *</label>
+                <select class="form-control" id="briefingState" required>
+                    <option>Zamfara</option><option>Kaduna</option><option>Katsina</option>
+                    <option>Sokoto</option><option>Niger</option><option>Kebbi</option>
+                </select>
+            </div>
+            <button class="btn btn-primary" onclick="generateBriefing()">Generate Briefing</button>
+        </div>
+        <div id="briefingOutput">
+            <div class="empty-state" style="padding:40px">
+                <div class="empty-state-icon">&#128203;</div>
+                <div class="empty-state-text">Generate a State Threat Briefing</div>
+                <div class="empty-state-hint">Focused operational briefing for a specific state</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Area Threat Briefing (Terrain + JIFC) -->
+<div class="tab-panel" id="areaBriefingPanel">
+    <div class="card">
+        <div style="margin-bottom:16px">
+            <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap">
+                <div class="form-group" style="margin-bottom:0">
+                    <label class="form-label">State *</label>
+                    <select class="form-control" id="areaState" required>
+                        <option>Zamfara</option><option>Kaduna</option><option>Katsina</option>
+                        <option>Sokoto</option><option>Niger</option><option>Kebbi</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin-bottom:0">
+                    <label class="form-label">Area Name</label>
+                    <input type="text" class="form-control" id="areaName"
+                        placeholder="e.g. Birnin Gwari, Shiroro" style="width:200px">
+                </div>
+                <div class="form-group" style="margin-bottom:0">
+                    <label style="display:flex;gap:4px;align-items:center;cursor:pointer;font-size:12px;color:var(--text-muted)">
+                        <input type="checkbox" id="showCoords" onchange="toggleCoordInputs()"> Use coordinates
+                    </label>
+                </div>
+                <button class="btn btn-primary" onclick="generateAreaBriefing()">Generate Area Briefing</button>
+            </div>
+
+            <!-- Coordinate inputs (hidden by default) -->
+            <div id="coordInputs" style="display:none;margin-top:12px">
+                <div style="display:flex;gap:12px;align-items:end">
+                    <div class="form-group" style="margin-bottom:0">
+                        <label class="form-label">Latitude</label>
+                        <input type="number" step="0.0001" class="form-control" id="areaLat"
+                            placeholder="e.g. 10.2345" style="width:140px">
+                    </div>
+                    <div class="form-group" style="margin-bottom:0">
+                        <label class="form-label">Longitude</label>
+                        <input type="number" step="0.0001" class="form-control" id="areaLon"
+                            placeholder="e.g. 6.5123" style="width:140px">
+                    </div>
+                </div>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:4px">
+                    Enter coordinates to analyze a specific point. Area name is optional with coordinates.
+                </div>
+            </div>
+        </div>
+
+        <!-- Area Map -->
+        <div class="card" style="margin-bottom:20px;padding:0">
+            <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border);flex-wrap:wrap">
+                <span style="font-size:13px;font-weight:600;color:var(--text-secondary)">Area Map</span>
+                <div class="coord-search" style="margin-left:auto">
+                    <input type="text" class="form-control" id="areaMapCoords" placeholder="Lat, Lon (e.g. 12.11, 5.96)" style="width:200px;font-size:12px;padding:4px 8px">
+                    <button class="btn btn-secondary btn-sm" onclick="searchCoordinates(areaMapInstance, 'areaMapCoords')">Go</button>
+                    <span style="color:var(--border);margin:0 4px">|</span>
+                    <input type="text" class="form-control" id="areaMapLocation" placeholder="Search location (e.g. Anka, Zamfara)" style="width:220px;font-size:12px;padding:4px 8px">
+                    <button class="btn btn-secondary btn-sm" onclick="searchLocation(areaMapInstance, 'areaMapLocation')">Search</button>
+                </div>
+            </div>
+            <div class="map-container" style="height:450px">
+                <div id="areaMap"></div>
+            </div>
+        </div>
+
+        <div id="areaBriefingOutput">
+            <div class="empty-state" style="padding:40px">
+                <div class="empty-state-icon">&#127758;</div>
+                <div class="empty-state-text">Generate an Area Threat Briefing</div>
+                <div class="empty-state-hint">Terrain-integrated JIFC analysis using real map data from OpenStreetMap</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Predictive Outlook -->
+<div class="tab-panel" id="outlookPanel">
+    <div class="card">
+        <div style="display:flex;gap:12px;align-items:end;margin-bottom:20px">
+            <div class="form-group" style="margin-bottom:0">
+                <label class="form-label">State</label>
+                <select class="form-control" id="outlookState">
+                    <option value="">All States</option>
+                    <option>Zamfara</option><option>Kaduna</option><option>Katsina</option>
+                    <option>Sokoto</option><option>Niger</option><option>Kebbi</option>
+                </select>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+                <label class="form-label">Horizon</label>
+                <select class="form-control" id="outlookDays">
+                    <option value="7">7 Days</option>
+                    <option value="14" selected>14 Days</option>
+                    <option value="30">30 Days</option>
+                </select>
+            </div>
+            <button class="btn btn-primary" onclick="generateOutlook()">Generate Outlook</button>
+        </div>
+        <div id="outlookOutput">
+            <div class="empty-state" style="padding:40px">
+                <div class="empty-state-icon">&#10132;</div>
+                <div class="empty-state-text">Generate a Predictive Outlook</div>
+                <div class="empty-state-hint">Requires a trained prediction model</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+.report-narrative {
+    margin-bottom: 20px;
+    padding: 20px 24px;
+    border-left: 3px solid var(--accent);
+    background: rgba(59,130,246,.05);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    font-size: 13.5px;
+    line-height: 1.8;
+    color: var(--text-secondary);
+}
+.report-narrative .narrative-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.report-narrative p { margin: 8px 0; }
+.report-narrative h2, .report-narrative h3 {
+    margin: 16px 0 8px; font-size: 14px; font-weight: 700; color: var(--text-primary);
+}
+.report-narrative ul, .report-narrative ol { margin: 4px 0; padding-left: 20px; }
+.report-narrative li { margin: 2px 0; }
+.report-narrative strong { color: var(--text-primary); }
+
+.terrain-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+}
+.terrain-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px;
+}
+.terrain-card-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+}
+.terrain-card-count {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+.terrain-card-detail {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+.terrain-list-item {
+    font-size: 12px;
+    padding: 3px 0;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border);
+}
+.terrain-list-item:last-child { border-bottom: none; }
+</style>
+<script>
+// --- Area Map ---
+let areaMapInstance = null;
+
+function initAreaMap() {
+    if (areaMapInstance) return;
+    areaMapInstance = L.map('areaMap').setView([11.5, 6.5], 7);
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: '&copy; Esri, Maxar, Earthstar Geographics',
+    }).addTo(areaMapInstance);
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+        attribution: '',
+    }).addTo(areaMapInstance);
+    bindCoordSearchEnter('areaMapCoords', () => areaMapInstance);
+    bindMapSearchEnter('areaMapLocation', () => areaMapInstance, searchLocation);
+}
+
+// --- Report Analysis state ---
+let analysisFile = null;
+
+function handleAnalysisDrop(e) {
+    e.preventDefault();
+    e.currentTarget.style.borderColor = 'var(--border)';
+    if (e.dataTransfer.files.length) {
+        selectAnalysisFile(e.dataTransfer.files);
+    }
+}
+
+function selectAnalysisFile(fileList) {
+    if (!fileList || !fileList.length) return;
+    const file = fileList[0];
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (!['docx', 'txt', 'pdf'].includes(ext)) {
+        showToast('Unsupported file type. Use .docx, .txt, or .pdf', 'error');
+        return;
+    }
+    analysisFile = file;
+    const infoEl = document.getElementById('analysisFileInfo');
+    infoEl.style.display = 'flex';
+    infoEl.innerHTML = `
+        <span style="font-size:20px">&#128196;</span>
+        <span style="flex:1;font-size:13px;color:var(--text-secondary)">${escHtml(file.name)}</span>
+        <span style="font-size:12px;color:var(--text-muted)">${(file.size / 1024).toFixed(1)} KB</span>
+        <button onclick="clearAnalysisFile()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:16px;padding:0 4px" title="Remove">&times;</button>
+    `;
+    document.getElementById('analyzeBtn').disabled = false;
+    document.getElementById('analysisFileInput').value = '';
+}
+
+function clearAnalysisFile() {
+    analysisFile = null;
+    document.getElementById('analysisFileInfo').style.display = 'none';
+    document.getElementById('analysisFileInfo').innerHTML = '';
+    document.getElementById('analyzeBtn').disabled = true;
+}
+
+async function runReportAnalysis() {
+    if (!analysisFile) {
+        showToast('Please upload a report first', 'error');
+        return;
+    }
+
+    const outputEl = document.getElementById('analysisOutput');
+    outputEl.innerHTML = '<div class="loading"><div class="spinner"></div> Analyzing report... This may take 15-30 seconds.</div>';
+    document.getElementById('analyzeBtn').disabled = true;
+
+    const formData = new FormData();
+    formData.append('file', analysisFile);
+
+    try {
+        const resp = await fetch('/api/reports/analyze', {
+            method: 'POST',
+            body: formData,
+        });
+        const data = await resp.json();
+
+        if (data.error) {
+            outputEl.innerHTML = `<div style="padding:20px;color:var(--warning)">${escHtml(data.error)}</div>`;
+        } else if (data.analysis) {
+            outputEl.innerHTML = `
+                <div style="margin-bottom:12px;font-size:12px;color:var(--text-muted)">
+                    Analyzed: <strong>${escHtml(data.filename)}</strong> (${(data.text_length / 1024).toFixed(1)} KB text)
+                    &middot; AI Backend: ${escHtml(data.ai_backend || 'unknown')}
+                </div>
+                <div class="report-narrative">
+                    <div class="narrative-header">&#9670; JIFC Comprehensive Analysis</div>
+                    ${renderMarkdownLike(data.analysis)}
+                </div>`;
+        } else {
+            outputEl.innerHTML = '<div style="padding:20px;color:var(--text-muted)">No analysis returned.</div>';
+        }
+    } catch (e) {
+        outputEl.innerHTML = `<div style="padding:20px;color:var(--warning)">Analysis failed: ${escHtml(e.message)}</div>`;
+    }
+
+    document.getElementById('analyzeBtn').disabled = false;
+}
+
+// --- SITREP file upload state ---
+let sitrepFile = null;
+
+function handleSitrepDrop(e) {
+    e.preventDefault();
+    e.currentTarget.style.borderColor = 'var(--border)';
+    if (e.dataTransfer.files.length) selectSitrepFile(e.dataTransfer.files);
+}
+
+function selectSitrepFile(fileList) {
+    if (!fileList || !fileList.length) return;
+    const file = fileList[0];
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (!['docx', 'txt', 'pdf'].includes(ext)) {
+        showToast('Unsupported file type. Use .docx, .txt, or .pdf', 'error');
+        return;
+    }
+    sitrepFile = file;
+    const infoEl = document.getElementById('sitrepFileInfo');
+    infoEl.style.display = 'flex';
+    infoEl.innerHTML = `
+        <span style="font-size:20px">&#128196;</span>
+        <span style="flex:1;font-size:13px;color:var(--text-secondary)">${escHtml(file.name)}</span>
+        <span style="font-size:12px;color:var(--text-muted)">${(file.size / 1024).toFixed(1)} KB</span>
+        <button onclick="clearSitrepFile()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:16px;padding:0 4px" title="Remove">&times;</button>
+    `;
+    document.getElementById('sitrepBtn').disabled = false;
+    document.getElementById('sitrepFileInput').value = '';
+}
+
+function clearSitrepFile() {
+    sitrepFile = null;
+    document.getElementById('sitrepFileInfo').style.display = 'none';
+    document.getElementById('sitrepFileInfo').innerHTML = '';
+    document.getElementById('sitrepBtn').disabled = true;
+}
+
+function toggleTemplateArea() {
+    const checked = document.getElementById('useSitrepTemplate').checked;
+    document.getElementById('templateArea').style.display = checked ? 'block' : 'none';
+}
+
+// --- Context file upload state (legacy) ---
+let uploadedContextTexts = [];
+
+function toggleCoordInputs() {
+    const show = document.getElementById('showCoords').checked;
+    document.getElementById('coordInputs').style.display = show ? 'block' : 'none';
+}
+
+// --- Saved template management ---
+async function loadSavedTemplate() {
+    try {
+        const data = await api('/api/settings/sitrep-template');
+        if (data && data.template) {
+            document.getElementById('sitrepTemplate').value = data.template;
+            document.querySelector('input[name="sitrepMode"][value="templated"]').checked = true;
+            toggleTemplateArea();
+            showTemplateSaveStatus('Loaded saved template');
+        }
+    } catch (e) {}
+}
+
+async function saveTemplate() {
+    const template = document.getElementById('sitrepTemplate').value.trim();
+    if (!template) return;
+    try {
+        await apiPost('/api/settings/sitrep-template', { template }, 'PUT');
+        showTemplateSaveStatus('Saved');
+    } catch (e) {
+        showTemplateSaveStatus('Save failed', true);
+    }
+}
+
+async function clearSavedTemplate() {
+    try {
+        await fetch('/api/settings/sitrep-template', { method: 'DELETE' });
+        document.getElementById('sitrepTemplate').value = '';
+        showTemplateSaveStatus('Cleared');
+    } catch (e) {}
+}
+
+function showTemplateSaveStatus(msg, isError) {
+    const el = document.getElementById('templateSaveStatus');
+    el.textContent = msg;
+    el.style.color = isError ? 'var(--warning)' : 'var(--success)';
+    el.style.display = 'inline';
+    setTimeout(() => { el.style.display = 'none'; }, 3000);
+}
+
+// --- Context file upload ---
+function handleContextDrop(e) {
+    e.preventDefault();
+    e.currentTarget.style.borderColor = 'var(--border)';
+    if (e.dataTransfer.files.length) {
+        handleContextFiles(e.dataTransfer.files);
+    }
+}
+
+async function handleContextFiles(fileList) {
+    if (!fileList || !fileList.length) return;
+    const formData = new FormData();
+    for (const f of fileList) formData.append('files', f);
+
+    const listEl = document.getElementById('contextFileList');
+    listEl.innerHTML = '<div style="font-size:12px;color:var(--text-muted)">Extracting text...</div>';
+
+    try {
+        const resp = await fetch('/api/reports/sitrep/upload-context', {
+            method: 'POST',
+            body: formData,
+        });
+        const data = await resp.json();
+
+        for (const file of (data.files || [])) {
+            if (file.error) {
+                continue;
+            }
+            uploadedContextTexts.push({ filename: file.filename, text: file.text, length: file.length });
+        }
+        renderContextFileList();
+    } catch (e) {
+        listEl.innerHTML = `<div style="font-size:12px;color:var(--warning)">Upload failed: ${escHtml(e.message)}</div>`;
+    }
+    // Reset file input so same file can be re-uploaded
+    document.getElementById('contextFileInput').value = '';
+}
+
+function removeContextFile(idx) {
+    uploadedContextTexts.splice(idx, 1);
+    renderContextFileList();
+}
+
+function renderContextFileList() {
+    const listEl = document.getElementById('contextFileList');
+    if (!uploadedContextTexts.length) {
+        listEl.innerHTML = '';
+        return;
+    }
+    let html = '';
+    uploadedContextTexts.forEach((f, i) => {
+        html += `<div style="display:flex;align-items:center;gap:8px;padding:4px 8px;margin:2px 0;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px">
+            <span style="flex:1;color:var(--text-secondary)">${escHtml(f.filename)}</span>
+            <span style="color:var(--text-muted)">${(f.length / 1024).toFixed(1)} KB</span>
+            <button onclick="removeContextFile(${i})" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;padding:0 4px" title="Remove">&times;</button>
+        </div>`;
+    });
+    html += `<div style="margin-top:4px"><button onclick="uploadedContextTexts=[];renderContextFileList()" style="font-size:11px;color:var(--text-muted);background:none;border:none;cursor:pointer;text-decoration:underline">Clear all</button></div>`;
+    listEl.innerHTML = html;
+}
+
+async function generateSitrep() {
+    if (!sitrepFile) {
+        showToast('Please upload a report first', 'error');
+        return;
+    }
+
+    const outputEl = document.getElementById('sitrepOutput');
+    outputEl.innerHTML = '<div class="loading"><div class="spinner"></div> Generating SITREP... This may take 15-30 seconds.</div>';
+    document.getElementById('sitrepBtn').disabled = true;
+
+    const useTemplate = document.getElementById('useSitrepTemplate').checked;
+    const template = useTemplate ? document.getElementById('sitrepTemplate').value.trim() : '';
+
+    const formData = new FormData();
+    formData.append('file', sitrepFile);
+    if (template) formData.append('template', template);
+
+    try {
+        const resp = await fetch('/api/reports/sitrep/from-report', {
+            method: 'POST',
+            body: formData,
+        });
+        const data = await resp.json();
+
+        if (data.error) {
+            outputEl.innerHTML = `<div style="padding:20px;color:var(--warning)">${escHtml(data.error)}</div>`;
+        } else if (data.narrative) {
+            outputEl.innerHTML = `
+                <div style="margin-bottom:12px;font-size:12px;color:var(--text-muted)">
+                    Source: <strong>${escHtml(data.filename)}</strong> (${(data.text_length / 1024).toFixed(1)} KB)
+                    &middot; AI Backend: ${escHtml(data.ai_backend || 'unknown')}
+                </div>
+                <div class="report-narrative">
+                    <div class="narrative-header">&#9670; JIFC Situation Report</div>
+                    ${renderMarkdownLike(data.narrative)}
+                </div>`;
+        } else {
+            outputEl.innerHTML = '<div style="padding:20px;color:var(--text-muted)">No SITREP generated.</div>';
+        }
+    } catch (e) {
+        outputEl.innerHTML = `<div style="padding:20px;color:var(--warning)">SITREP generation failed: ${escHtml(e.message)}</div>`;
+    }
+
+    document.getElementById('sitrepBtn').disabled = false;
+}
+
+async function generateBriefing() {
+    const state = document.getElementById('briefingState').value;
+    document.getElementById('briefingOutput').innerHTML = '<div class="loading"><div class="spinner"></div> Generating...</div>';
+    const data = await api(`/api/reports/threat-briefing/${state}`);
+    renderReport('briefingOutput', data);
+}
+
+async function generateAreaBriefing() {
+    const state = document.getElementById('areaState').value;
+    const areaName = document.getElementById('areaName').value.trim();
+    const useCoords = document.getElementById('showCoords').checked;
+
+    const body = { state };
+
+    if (useCoords) {
+        const lat = parseFloat(document.getElementById('areaLat').value);
+        const lon = parseFloat(document.getElementById('areaLon').value);
+        if (isNaN(lat) || isNaN(lon)) {
+            document.getElementById('areaBriefingOutput').innerHTML =
+                '<div style="padding:16px;color:var(--warning)">Please enter valid latitude and longitude.</div>';
+            return;
+        }
+        body.lat = lat;
+        body.lon = lon;
+        if (areaName) body.area_name = areaName;
+    } else {
+        if (!areaName) {
+            document.getElementById('areaBriefingOutput').innerHTML =
+                '<div style="padding:16px;color:var(--warning)">Please enter an area name or enable coordinate input.</div>';
+            return;
+        }
+        body.area_name = areaName;
+    }
+
+    document.getElementById('areaBriefingOutput').innerHTML =
+        '<div class="loading"><div class="spinner"></div> Fetching terrain data & generating briefing... This may take 15-30 seconds.</div>';
+
+    const data = await apiPost('/api/reports/threat-briefing/area', body);
+    renderTerrainBriefing('areaBriefingOutput', data);
+
+    // Fly map to the area
+    if (data && data.area_info && areaMapInstance) {
+        const lat = data.area_info.lat;
+        const lon = data.area_info.lon;
+        if (lat && lon) {
+            areaMapInstance.flyTo([lat, lon], 11);
+            // Clear previous area markers
+            if (window._areaMarker) areaMapInstance.removeLayer(window._areaMarker);
+            window._areaMarker = L.marker([lat, lon])
+                .addTo(areaMapInstance)
+                .bindPopup(`<b>${escHtml(data.area || 'Target Area')}</b><br>${escHtml(data.state || '')}<br>Lat: ${lat.toFixed(4)}, Lon: ${lon.toFixed(4)}`)
+                .openPopup();
+        }
+    }
+}
+
+async function generateOutlook() {
+    const state = document.getElementById('outlookState').value;
+    const days = document.getElementById('outlookDays').value;
+    let url = `/api/reports/predictive-outlook?horizon_days=${days}`;
+    if (state) url += `&state=${state}`;
+
+    document.getElementById('outlookOutput').innerHTML = '<div class="loading"><div class="spinner"></div> Generating...</div>';
+    const data = await api(url);
+
+    if (data && data.detail) {
+        document.getElementById('outlookOutput').innerHTML =
+            `<div style="padding:16px;color:var(--warning)">${escHtml(data.detail)}</div>`;
+        return;
+    }
+    renderReport('outlookOutput', data);
+}
+
+async function apiPost(url, body, method) {
+    try {
+        const resp = await fetch(url, {
+            method: method || 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        return await resp.json();
+    } catch (e) {
+        return { error: e.message };
+    }
+}
+
+function renderMarkdownLike(text) {
+    if (!text) return '';
+    let html = escHtml(text);
+    // Headings: ## and ###
+    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+    // Bold
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    // Bullet points
+    html = html.replace(/^[-*] (.+)$/gm, '<li>$1</li>');
+    // Wrap consecutive <li> in <ul>
+    html = html.replace(/((?:<li>.*<\/li>\n?)+)/g, '<ul>$1</ul>');
+    // Numbered lists
+    html = html.replace(/^\d+\.\s+(.+)$/gm, '<li>$1</li>');
+    // Paragraphs (double newline)
+    html = html.replace(/\n\n+/g, '</p><p>');
+    // Single newlines within paragraphs
+    html = html.replace(/\n/g, '<br>');
+    return '<p>' + html + '</p>';
+}
+
+function renderTemplatedReport(containerId, data) {
+    const container = document.getElementById(containerId);
+    if (!data || data.status === 'no_data') {
+        container.innerHTML = '<div style="padding:20px;color:var(--text-muted)">No data available. Ingest incident data first.</div>';
+        return;
+    }
+    if (data.error) {
+        container.innerHTML = `<div style="padding:20px;color:var(--warning)">${escHtml(data.error)}</div>`;
+        return;
+    }
+
+    let html = '';
+
+    if (data.narrative) {
+        const label = data.fallback ? 'Standard SITREP (AI unavailable)' : 'JIFC Templated SITREP';
+        html += `<div class="report-narrative">
+            <div class="narrative-header">&#9670; ${label}</div>
+            ${renderMarkdownLike(data.narrative)}
+        </div>`;
+    }
+
+    // Show underlying data collapsed
+    if (data.data) {
+        html += `<details style="margin-top:12px">
+            <summary style="cursor:pointer;font-size:12px;color:var(--text-muted);margin-bottom:8px">View underlying data</summary>
+            <div class="report-output" style="font-size:13px">${formatReportJson(data.data, 0)}</div>
+        </details>`;
+    }
+
+    container.innerHTML = html;
+}
+
+function renderTerrainBriefing(containerId, data) {
+    const container = document.getElementById(containerId);
+    if (!data || data.error) {
+        container.innerHTML = `<div style="padding:20px;color:var(--warning)">${escHtml(data?.error || 'Failed to generate briefing')}</div>`;
+        return;
+    }
+
+    let html = '';
+
+    // Area header
+    const area = data.area || 'Unknown Area';
+    const state = data.state || '';
+    html += `<div style="margin-bottom:16px">
+        <h3 style="margin:0;font-size:16px;color:var(--text-primary)">${escHtml(area)}, ${escHtml(state)} State</h3>`;
+    if (data.area_info) {
+        html += `<div style="font-size:12px;color:var(--text-muted);margin-top:4px">
+            Coordinates: ${data.area_info.lat?.toFixed(4) || '?'}, ${data.area_info.lon?.toFixed(4) || '?'}
+        </div>`;
+    }
+    html += '</div>';
+
+    // JIFC Narrative
+    if (data.narrative) {
+        html += `<div class="report-narrative">
+            <div class="narrative-header">&#9670; JIFC Terrain Threat Briefing (Claude AI)</div>
+            ${renderMarkdownLike(data.narrative)}
+        </div>`;
+    }
+
+    // Terrain summary cards
+    const t = data.terrain || {};
+    const ts = t.tactical_summary || {};
+    html += '<div class="terrain-grid">';
+
+    // Settlements card
+    html += `<div class="terrain-card">
+        <div class="terrain-card-title">Settlements</div>
+        <div class="terrain-card-count">${ts.total_settlements || 0}</div>
+        <div class="terrain-card-detail">`;
+    const sb = ts.settlement_breakdown || {};
+    for (const [type, count] of Object.entries(sb)) {
+        html += `${type}: ${count}<br>`;
+    }
+    html += '</div>';
+    if (t.settlements && t.settlements.length > 0) {
+        html += '<div style="margin-top:8px">';
+        t.settlements.slice(0, 6).forEach(s => {
+            const dist = s.distance_km ? ` (${s.distance_km}km ${s.direction || ''})` : '';
+            html += `<div class="terrain-list-item">${escHtml(s.name || 'unnamed')} - ${s.place_type || '?'}${dist}</div>`;
+        });
+        html += '</div>';
+    }
+    html += '</div>';
+
+    // Roads card
+    html += `<div class="terrain-card">
+        <div class="terrain-card-title">Roads & Routes</div>
+        <div class="terrain-card-count">${ts.total_roads || 0}</div>
+        <div class="terrain-card-detail">`;
+    const rt = ts.road_types || t.road_summary || {};
+    for (const [type, count] of Object.entries(rt)) {
+        html += `${type}: ${count}<br>`;
+    }
+    html += '</div>';
+    // Avenues of approach
+    const avenues = ts.avenues_of_approach || [];
+    if (avenues.length > 0) {
+        html += '<div style="margin-top:8px;font-size:11px;color:var(--accent)">Key Routes:</div>';
+        avenues.slice(0, 5).forEach(a => {
+            html += `<div class="terrain-list-item">${escHtml(a.route)} (${a.type}) ${a.direction || ''}</div>`;
+        });
+    }
+    html += '</div>';
+
+    // Waterways card
+    html += `<div class="terrain-card">
+        <div class="terrain-card-title">Waterways</div>
+        <div class="terrain-card-count">${ts.total_waterways || 0}</div>
+        <div class="terrain-card-detail">`;
+    if (t.waterways && t.waterways.length > 0) {
+        t.waterways.slice(0, 6).forEach(w => {
+            const dist = w.distance_km ? ` (${w.distance_km}km ${w.direction || ''})` : '';
+            html += `<div class="terrain-list-item">${escHtml(w.name || 'unnamed')} - ${w.waterway_type || '?'}${dist}</div>`;
+        });
+    } else {
+        html += 'None found in area';
+    }
+    html += '</div></div>';
+
+    // Infrastructure card
+    html += `<div class="terrain-card">
+        <div class="terrain-card-title">Key Infrastructure</div>
+        <div class="terrain-card-detail">`;
+    const ki = ts.key_infrastructure || [];
+    if (ki.length > 0) {
+        ki.forEach(i => {
+            const dist = i.distance_km ? ` (${i.distance_km}km ${i.direction || ''})` : '';
+            html += `<div class="terrain-list-item">${escHtml(i.name || 'unnamed')} - ${i.infra_type || '?'}${dist}</div>`;
+        });
+    } else if (t.infrastructure && t.infrastructure.length > 0) {
+        t.infrastructure.slice(0, 8).forEach(i => {
+            const dist = i.distance_km ? ` (${i.distance_km}km ${i.direction || ''})` : '';
+            html += `<div class="terrain-list-item">${escHtml(i.name || 'unnamed')} - ${i.infra_type || '?'}${dist}</div>`;
+        });
+    } else {
+        html += 'None found in area';
+    }
+    html += '</div></div>';
+
+    // Natural Features card
+    html += `<div class="terrain-card">
+        <div class="terrain-card-title">Natural Features & Cover</div>
+        <div class="terrain-card-count">${ts.natural_features_count || 0}</div>
+        <div class="terrain-card-detail">`;
+    const cover = ts.cover_concealment_types || [];
+    if (cover.length > 0) {
+        html += 'Cover types: ' + cover.join(', ') + '<br>';
+    }
+    const obstacles = ts.obstacles || [];
+    if (obstacles.length > 0) {
+        html += '<div style="margin-top:4px;font-size:11px;color:var(--accent)">Obstacles:</div>';
+        obstacles.slice(0, 5).forEach(o => {
+            html += `<div class="terrain-list-item">${escHtml(o)}</div>`;
+        });
+    }
+    html += '</div></div>';
+
+    // Incident Summary card
+    const inc = data.incident_summary || {};
+    const incData = inc.incidents || {};
+    html += `<div class="terrain-card">
+        <div class="terrain-card-title">Incident History (${escHtml(state)})</div>
+        <div class="terrain-card-detail">`;
+    if (incData.total_all_time) {
+        html += `Total incidents: ${incData.total_all_time}<br>`;
+        html += `Last 30 days: ${incData.total_last_30d || 0}<br>`;
+        html += `Killed (30d): ${incData.killed_last_30d || 0}<br>`;
+        html += `Kidnapped (30d): ${incData.kidnapped_last_30d || 0}<br>`;
+        const types30 = incData.types_last_30d || {};
+        if (Object.keys(types30).length > 0) {
+            html += '<div style="margin-top:4px;font-size:11px;color:var(--accent)">Types (30d):</div>';
+            for (const [t, c] of Object.entries(types30)) {
+                html += `${t.replace(/_/g, ' ')}: ${c}<br>`;
+            }
+        }
+    } else {
+        html += 'No incident data available';
+    }
+    html += '</div></div>';
+
+    html += '</div>'; // Close terrain-grid
+
+    container.innerHTML = html;
+}
+
+function renderReport(containerId, data) {
+    const container = document.getElementById(containerId);
+    if (!data || data.status === 'no_data') {
+        container.innerHTML = '<div style="padding:20px;color:var(--text-muted)">No data available for this period/state. Ingest incident data first.</div>';
+        return;
+    }
+
+    let html = '';
+
+    // Show Claude narrative prominently at top if available
+    if (data.narrative) {
+        const paragraphs = data.narrative.split('\n').filter(p => p.trim()).map(p => `<p>${escHtml(p)}</p>`).join('');
+        html += `<div class="report-narrative">
+            <div class="narrative-header">&#9670; JIFC Intelligence Narrative</div>
+            ${paragraphs}
+        </div>`;
+    }
+
+    // Show executive summary as fallback
+    if (!data.narrative && data.executive_summary) {
+        html += `<div class="report-narrative" style="border-left-color:var(--warning)">
+            <div class="narrative-header">Executive Summary</div>
+            <p>${escHtml(data.executive_summary)}</p>
+        </div>`;
+    }
+
+    // Build structured data display
+    html += '<div class="report-output" style="font-size:13px">';
+    // Filter out narrative from the JSON display
+    const displayData = Object.fromEntries(
+        Object.entries(data).filter(([k]) => k !== 'narrative')
+    );
+    html += formatReportJson(displayData, 0);
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function formatReportJson(obj, depth) {
+    if (obj === null || obj === undefined) return '<span style="color:var(--text-muted)">—</span>';
+    if (typeof obj === 'string') return `<span style="color:#10b981">"${escHtml(obj)}"</span>`;
+    if (typeof obj === 'number') return `<span style="color:#f59e0b">${obj}</span>`;
+    if (typeof obj === 'boolean') return `<span style="color:#06b6d4">${obj}</span>`;
+
+    if (Array.isArray(obj)) {
+        if (obj.length === 0) return '<span style="color:var(--text-muted)">[]</span>';
+        if (typeof obj[0] === 'string') return obj.map(v => `<span style="color:#10b981">"${escHtml(v)}"</span>`).join(', ');
+        let out = '';
+        obj.forEach((item, i) => {
+            out += `<div style="padding-left:${(depth+1)*16}px;border-left:1px solid var(--border);margin:4px 0">${formatReportJson(item, depth+1)}</div>`;
+        });
+        return out;
+    }
+
+    if (typeof obj === 'object') {
+        let out = '';
+        for (const [key, val] of Object.entries(obj)) {
+            const label = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            if (typeof val === 'object' && val !== null && !Array.isArray(val)) {
+                out += `<div style="margin:8px 0"><strong style="color:var(--accent)">${escHtml(label)}</strong></div>`;
+                out += `<div style="padding-left:16px">${formatReportJson(val, depth+1)}</div>`;
+            } else {
+                out += `<div><span style="color:var(--text-secondary)">${escHtml(label)}:</span> ${formatReportJson(val, depth+1)}</div>`;
+            }
+        }
+        return out;
+    }
+    return String(obj);
+}
+
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// Load saved template on page load
+document.addEventListener('DOMContentLoaded', loadSavedTemplate);
+</script>
+{% endblock %}
