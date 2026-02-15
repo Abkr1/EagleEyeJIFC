@@ -26,12 +26,13 @@ class ThreatScorer:
     """
 
     # Weight configuration for threat factors
+    # Frequency and severity (absolute measures) dominate
     WEIGHTS = {
-        "frequency": 0.25,
-        "severity": 0.20,
-        "trend": 0.20,
+        "frequency": 0.30,
+        "severity": 0.30,
+        "trend": 0.10,
         "geographic_spread": 0.15,
-        "tactic_escalation": 0.10,
+        "tactic_escalation": 0.05,
         "recency": 0.10,
     }
 
@@ -104,14 +105,90 @@ class ThreatScorer:
         }
 
     def score_all_states(self, assessment_date: Optional[datetime] = None) -> list[dict]:
-        """Score all target states and rank them by threat level."""
+        """Score all target states and rank them by threat level.
+
+        Uses cross-state normalization so component scores are relative
+        to the most-affected state, preventing low-activity states from
+        scoring disproportionately high on relative metrics.
+        """
+        if assessment_date is None:
+            assessment_date = datetime.now()
+
+        # Collect raw component values for all states first
+        raw_data = {}
+        for state in TARGET_STATES:
+            state_df = self.df[self.df["state"].str.lower() == state.lower()]
+            if state_df.empty:
+                raw_data[state] = None
+                continue
+            raw_data[state] = {
+                "df": state_df,
+                "frequency": self._raw_frequency(state_df, assessment_date),
+                "severity": self._raw_severity(state_df, assessment_date),
+                "trend": self._raw_trend(state_df, assessment_date),
+                "geographic_spread": self._raw_geographic_spread(state_df, assessment_date),
+                "tactic_escalation": self._tactic_escalation_score(state_df, assessment_date),
+                "recency": self._recency_score(state_df, assessment_date),
+            }
+
+        # Find max values across states for normalization
+        active = {s: d for s, d in raw_data.items() if d is not None}
+        if not active:
+            return [self._empty_score(s) for s in TARGET_STATES]
+
+        max_freq = max((d["frequency"] for d in active.values()), default=1) or 1
+        max_sev = max((d["severity"] for d in active.values()), default=1) or 1
+        max_spread = max((d["geographic_spread"] for d in active.values()), default=1) or 1
+
         scores = []
         for state in TARGET_STATES:
-            score = self.score_state(state, assessment_date)
-            scores.append(score)
+            if raw_data[state] is None:
+                scores.append(self._empty_score(state))
+                continue
+
+            d = raw_data[state]
+            state_df = d["df"]
+
+            # Normalize frequency, severity, spread relative to cross-state max
+            components = {
+                "frequency": min(100, (d["frequency"] / max_freq) * 100),
+                "severity": min(100, (d["severity"] / max_sev) * 100),
+                "trend": d["trend"],
+                "geographic_spread": min(100, (d["geographic_spread"] / max_spread) * 100),
+                "tactic_escalation": d["tactic_escalation"],
+                "recency": d["recency"],
+            }
+
+            overall = sum(
+                components[factor] * weight
+                for factor, weight in self.WEIGHTS.items()
+            )
+            overall = min(100, max(0, overall))
+            threat_level = self._score_to_level(overall)
+
+            scores.append({
+                "state": state,
+                "assessment_date": assessment_date.isoformat(),
+                "overall_score": round(overall, 1),
+                "threat_level": threat_level,
+                "threat_label": self._level_label(threat_level),
+                "component_scores": {k: round(v, 1) for k, v in components.items()},
+                "weights": self.WEIGHTS,
+                "incidents_last_30d": len(state_df[state_df["date"] >= assessment_date - timedelta(days=30)]),
+                "incidents_last_90d": len(state_df[state_df["date"] >= assessment_date - timedelta(days=90)]),
+            })
 
         scores.sort(key=lambda x: x["overall_score"], reverse=True)
         return scores
+
+    def _empty_score(self, state: str) -> dict:
+        return {
+            "state": state,
+            "overall_score": 0,
+            "threat_level": 1,
+            "threat_label": "LOW",
+            "status": "no_data",
+        }
 
     def score_lga(self, state: str, lga: str,
                   assessment_date: Optional[datetime] = None) -> dict:
@@ -150,25 +227,36 @@ class ThreatScorer:
             "last_incident": lga_df["date"].max().isoformat(),
         }
 
+    def _raw_frequency(self, df: pd.DataFrame, ref_date: datetime) -> float:
+        """Raw incident count in last 30 days (for cross-state normalization)."""
+        recent = df[df["date"] >= ref_date - timedelta(days=30)]
+        return float(len(recent))
+
     def _frequency_score(self, df: pd.DataFrame, ref_date: datetime) -> float:
         """Score based on incident frequency in last 30 days."""
+        return min(100, self._raw_frequency(df, ref_date) * 10)
+
+    def _raw_severity(self, df: pd.DataFrame, ref_date: datetime) -> float:
+        """Raw casualty severity in last 30 days (for cross-state normalization)."""
         recent = df[df["date"] >= ref_date - timedelta(days=30)]
-        count = len(recent)
-        # Normalize: 0 incidents = 0, 10+ incidents = 100
-        return min(100, count * 10)
+        if recent.empty:
+            return 0.0
+        killed = recent["casualties_killed"].sum()
+        kidnapped = recent["kidnapped_count"].sum()
+        injured = recent["casualties_injured"].sum() if "casualties_injured" in recent.columns else 0
+        return float(killed * 3 + kidnapped * 2 + injured)
 
     def _severity_score(self, df: pd.DataFrame, ref_date: datetime) -> float:
         """Score based on casualty severity in last 30 days."""
-        recent = df[df["date"] >= ref_date - timedelta(days=30)]
-        if recent.empty:
-            return 0
-        killed = recent["casualties_killed"].sum()
-        kidnapped = recent["kidnapped_count"].sum()
-        severity = killed * 3 + kidnapped * 2
-        return min(100, severity * 2)
+        return min(100, self._raw_severity(df, ref_date) * 2)
 
     def _trend_score(self, df: pd.DataFrame, ref_date: datetime) -> float:
-        """Score based on whether activity is increasing."""
+        """Trend score for single-state use (delegates to _raw_trend)."""
+        return self._raw_trend(df, ref_date)
+
+    def _raw_trend(self, df: pd.DataFrame, ref_date: datetime) -> float:
+        """Trend score weighted by absolute volume so small fluctuations
+        in low-activity states don't dominate."""
         recent_30d = len(df[df["date"] >= ref_date - timedelta(days=30)])
         prev_30d = len(df[
             (df["date"] >= ref_date - timedelta(days=60))
@@ -176,20 +264,27 @@ class ThreatScorer:
         ])
 
         if prev_30d == 0:
-            return 50 if recent_30d > 0 else 0
+            # No baseline — score proportional to current count, capped
+            return min(100, recent_30d * 5) if recent_30d > 0 else 0.0
 
-        change = (recent_30d - prev_30d) / prev_30d
-        # Map: -100% change = 0, 0% = 50, +100% = 100
-        return min(100, max(0, 50 + change * 50))
+        pct_change = (recent_30d - prev_30d) / prev_30d
+        # Base trend from percentage change: -100%→0, 0%→50, +100%→100
+        base = min(100, max(0, 50 + pct_change * 50))
+        # Dampen for low-volume states: scale by volume factor
+        # (states with few incidents shouldn't score 100 on trend)
+        volume_factor = min(1.0, max(recent_30d, prev_30d) / 10.0)
+        return base * volume_factor
+
+    def _raw_geographic_spread(self, df: pd.DataFrame, ref_date: datetime) -> float:
+        """Raw LGA count affected in last 30 days (for cross-state normalization)."""
+        recent = df[df["date"] >= ref_date - timedelta(days=30)]
+        if recent.empty:
+            return 0.0
+        return float(recent["lga"].nunique())
 
     def _geographic_spread_score(self, df: pd.DataFrame, ref_date: datetime) -> float:
         """Score based on how many LGAs are affected."""
-        recent = df[df["date"] >= ref_date - timedelta(days=30)]
-        if recent.empty:
-            return 0
-        lga_count = recent["lga"].nunique()
-        # Normalize: 1 LGA = 10, 10+ LGAs = 100
-        return min(100, lga_count * 10)
+        return min(100, self._raw_geographic_spread(df, ref_date) * 10)
 
     def _tactic_escalation_score(self, df: pd.DataFrame, ref_date: datetime) -> float:
         """Score based on whether attack types are becoming more severe."""
