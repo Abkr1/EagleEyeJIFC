@@ -103,11 +103,145 @@ function _placeSearchMarker(mapInstance, markerId, lat, lon, label) {
         mapInstance.removeLayer(_mapSearchMarkers[markerId]);
     }
     mapInstance.flyTo([lat, lon], 12);
+    const saveBtn = `<br><a href="#" onclick="event.preventDefault();promptSaveLocation(${lat},${lon},'${label.replace(/'/g, "\\'").replace(/<[^>]*>/g, '').substring(0,60)}')" style="color:var(--accent,#3b82f6);font-size:12px">Save location</a>`;
     _mapSearchMarkers[markerId] = L.marker([lat, lon])
         .addTo(mapInstance)
-        .bindPopup(label)
+        .bindPopup(label + saveBtn)
         .openPopup();
 }
+
+// ---- Saved Locations (localStorage) ----
+const SAVED_LOC_KEY = 'eagleeye_saved_locations';
+let _savedMarkerLayers = {};
+
+function getSavedLocations() {
+    try {
+        return JSON.parse(localStorage.getItem(SAVED_LOC_KEY)) || [];
+    } catch { return []; }
+}
+
+function _writeSavedLocations(locs) {
+    localStorage.setItem(SAVED_LOC_KEY, JSON.stringify(locs));
+}
+
+function saveLocation(name, lat, lon) {
+    const locs = getSavedLocations();
+    locs.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name, lat, lon });
+    _writeSavedLocations(locs);
+    showToast('Location saved', 'success');
+    _refreshAllSavedPanels();
+}
+
+function renameLocation(id) {
+    const locs = getSavedLocations();
+    const loc = locs.find(l => l.id === id);
+    if (!loc) return;
+    const newName = prompt('Rename location:', loc.name);
+    if (newName === null || !newName.trim()) return;
+    loc.name = newName.trim();
+    _writeSavedLocations(locs);
+    showToast('Location renamed', 'success');
+    _refreshAllSavedPanels();
+}
+
+function deleteLocation(id) {
+    const locs = getSavedLocations().filter(l => l.id !== id);
+    _writeSavedLocations(locs);
+    showToast('Location deleted', 'info');
+    _refreshAllSavedPanels();
+}
+
+function promptSaveLocation(lat, lon, rawLabel) {
+    const defaultName = rawLabel.replace(/Lat:.*|Lon:.*|Search Result/gi, '').replace(/,\s*$/, '').trim() || `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+    const name = prompt('Save location as:', defaultName);
+    if (name === null || !name.trim()) return;
+    saveLocation(name.trim(), lat, lon);
+}
+
+function _refreshAllSavedPanels() {
+    document.querySelectorAll('.saved-locations-panel').forEach(panel => {
+        const mapId = panel.dataset.mapId;
+        const mapInst = panel.dataset.mapVar ? window[panel.dataset.mapVar] : null;
+        if (mapInst) {
+            showSavedMarkers(mapInst, mapId);
+        }
+        renderSavedLocations(mapInst, panel.id);
+    });
+}
+
+function renderSavedLocations(mapInstance, containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const locs = getSavedLocations();
+
+    // Update toggle button count — find the toggle that controls this panel
+    const toggleBtn = document.querySelector(`[onclick*="${containerId}"].saved-loc-toggle`);
+    if (toggleBtn) {
+        toggleBtn.textContent = `Saved (${locs.length})`;
+    }
+
+    if (!locs.length) {
+        container.innerHTML = '<div style="padding:8px 12px;font-size:12px;color:var(--text-muted)">No saved locations yet. Search and save a location.</div>';
+        return;
+    }
+
+    container.innerHTML = locs.map(l => `
+        <div class="saved-loc-item">
+            <div class="saved-loc-info" onclick="flyToSaved('${containerId}', ${l.lat}, ${l.lon})" title="Fly to location">
+                <span class="saved-loc-name">${escHtml(l.name)}</span>
+                <span class="saved-loc-coords">${l.lat.toFixed(4)}, ${l.lon.toFixed(4)}</span>
+            </div>
+            <div class="saved-loc-actions">
+                <button onclick="renameLocation('${l.id}')" title="Rename" class="saved-loc-btn">&#9998;</button>
+                <button onclick="deleteLocation('${l.id}')" title="Delete" class="saved-loc-btn saved-loc-btn-del">&times;</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function flyToSaved(containerId, lat, lon) {
+    const panel = document.getElementById(containerId);
+    if (!panel) return;
+    const mapInst = panel.dataset.mapVar ? window[panel.dataset.mapVar] : null;
+    if (mapInst) {
+        mapInst.flyTo([lat, lon], 12);
+    }
+}
+
+function showSavedMarkers(mapInstance, groupId) {
+    if (!mapInstance) return;
+    // Remove existing saved markers for this group
+    if (_savedMarkerLayers[groupId]) {
+        _savedMarkerLayers[groupId].forEach(m => mapInstance.removeLayer(m));
+    }
+    _savedMarkerLayers[groupId] = [];
+
+    const blueIcon = L.icon({
+        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png',
+        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+        iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+    });
+
+    getSavedLocations().forEach(l => {
+        const marker = L.marker([l.lat, l.lon], { icon: blueIcon })
+            .addTo(mapInstance)
+            .bindPopup(`<b>${escHtml(l.name)}</b><br>Lat: ${l.lat.toFixed(4)}<br>Lon: ${l.lon.toFixed(4)}<br><a href="#" onclick="event.preventDefault();renameLocation('${l.id}')" style="font-size:12px;color:#3b82f6">Rename</a> | <a href="#" onclick="event.preventDefault();deleteLocation('${l.id}')" style="font-size:12px;color:#ef4444">Delete</a>`);
+        _savedMarkerLayers[groupId].push(marker);
+    });
+}
+
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// Initialize saved location toggle counts on page load
+document.addEventListener('DOMContentLoaded', () => {
+    const count = getSavedLocations().length;
+    document.querySelectorAll('.saved-loc-toggle').forEach(btn => {
+        btn.textContent = `Saved (${count})`;
+    });
+    document.querySelectorAll('.saved-locations-panel').forEach(panel => {
+        renderSavedLocations(null, panel.id);
+    });
+});
 
 function searchCoordinates(mapInstance, inputId) {
     const input = document.getElementById(inputId);

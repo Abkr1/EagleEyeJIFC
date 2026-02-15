@@ -191,7 +191,10 @@
             <span style="color:var(--border);margin:0 4px">|</span>
             <input type="text" class="form-control" id="incMapLocation" placeholder="Search location (e.g. Anka, Zamfara)" style="width:220px;font-size:12px;padding:4px 8px">
             <button class="btn btn-secondary btn-sm" onclick="searchLocation(incidentMapInstance, 'incMapLocation')">Search</button>
+            <span style="color:var(--border);margin:0 4px">|</span>
+            <button class="saved-loc-toggle" onclick="document.getElementById('incSavedPanel').classList.toggle('open')">Saved (0)</button>
         </div>
+        <div class="saved-locations-panel" id="incSavedPanel" data-map-id="incidentMap" data-map-var="incidentMapInstance"></div>
         <div class="map-container" style="height:calc(100vh - 240px)">
             <div id="incidentMap"></div>
         </div>
@@ -297,17 +300,18 @@ async function initIncidentMap() {
     incidentMapInstance = L.map('incidentMap').setView([11.5, 6.5], 7);
     bindCoordSearchEnter('incMapCoords', () => incidentMapInstance);
     bindMapSearchEnter('incMapLocation', () => incidentMapInstance, searchLocation);
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-        attribution: '&copy; Esri, Maxar, Earthstar Geographics',
-    }).addTo(incidentMapInstance);
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
-        attribution: '',
+    L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+        attribution: '&copy; Google Earth',
+        maxZoom: 20,
     }).addTo(incidentMapInstance);
 
     const days = document.getElementById('filterDays').value;
     if (!days) return;
     const data = await api(`/api/incidents?days=${days}`);
     if (!data || !data.incidents) return;
+
+    showSavedMarkers(incidentMapInstance, 'incidentMap');
+    renderSavedLocations(incidentMapInstance, 'incSavedPanel');
 
     const withCoords = data.incidents.filter(i => i.latitude && i.longitude);
     withCoords.forEach(i => {

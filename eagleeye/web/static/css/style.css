@@ -740,6 +740,103 @@ select.form-control {
     font-size: 13px;
 }
 
+/* Saved Locations */
+.saved-loc-toggle {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 12px;
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+
+.saved-loc-toggle:hover {
+    background: var(--bg-card-hover);
+    color: var(--text-primary);
+}
+
+.saved-locations-panel {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+    background: var(--bg-secondary);
+    border-top: none;
+}
+
+.saved-locations-panel.open {
+    max-height: 300px;
+    overflow-y: auto;
+    border-top: 1px solid var(--border);
+}
+
+.saved-loc-item {
+    display: flex;
+    align-items: center;
+    padding: 6px 12px;
+    border-bottom: 1px solid rgba(42,63,82,.4);
+    transition: background 0.1s;
+}
+
+.saved-loc-item:last-child { border-bottom: none; }
+
+.saved-loc-item:hover {
+    background: var(--bg-card-hover);
+}
+
+.saved-loc-info {
+    flex: 1;
+    cursor: pointer;
+    min-width: 0;
+}
+
+.saved-loc-name {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.saved-loc-coords {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: monospace;
+}
+
+.saved-loc-actions {
+    display: flex;
+    gap: 2px;
+    flex-shrink: 0;
+    margin-left: 8px;
+}
+
+.saved-loc-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 14px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    transition: all 0.1s;
+    line-height: 1;
+}
+
+.saved-loc-btn:hover {
+    background: var(--bg-card);
+    color: var(--text-primary);
+}
+
+.saved-loc-btn-del:hover {
+    color: var(--danger);
+    background: rgba(239,68,68,.1);
+}
+
 /* Responsive */
 @media (max-width: 1024px) {
     .grid-6 { grid-template-columns: repeat(3, 1fr); }

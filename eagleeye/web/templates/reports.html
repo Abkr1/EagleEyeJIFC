@@ -218,8 +218,11 @@ Classification: RESTRICTED
                     <span style="color:var(--border);margin:0 4px">|</span>
                     <input type="text" class="form-control" id="areaMapLocation" placeholder="Search location (e.g. Anka, Zamfara)" style="width:220px;font-size:12px;padding:4px 8px">
                     <button class="btn btn-secondary btn-sm" onclick="searchLocation(areaMapInstance, 'areaMapLocation')">Search</button>
+                    <span style="color:var(--border);margin:0 4px">|</span>
+                    <button class="saved-loc-toggle" onclick="document.getElementById('areaSavedPanel').classList.toggle('open')">Saved (0)</button>
                 </div>
             </div>
+            <div class="saved-locations-panel" id="areaSavedPanel" data-map-id="areaMap" data-map-var="areaMapInstance"></div>
             <div class="map-container" style="height:450px">
                 <div id="areaMap"></div>
             </div>
@@ -345,14 +348,14 @@ let areaMapInstance = null;
 function initAreaMap() {
     if (areaMapInstance) return;
     areaMapInstance = L.map('areaMap').setView([11.5, 6.5], 7);
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-        attribution: '&copy; Esri, Maxar, Earthstar Geographics',
-    }).addTo(areaMapInstance);
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
-        attribution: '',
+    L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+        attribution: '&copy; Google Earth',
+        maxZoom: 20,
     }).addTo(areaMapInstance);
     bindCoordSearchEnter('areaMapCoords', () => areaMapInstance);
     bindMapSearchEnter('areaMapLocation', () => areaMapInstance, searchLocation);
+    showSavedMarkers(areaMapInstance, 'areaMap');
+    renderSavedLocations(areaMapInstance, 'areaSavedPanel');
 }
 
 // --- Report Analysis state ---
