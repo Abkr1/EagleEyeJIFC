@@ -169,15 +169,15 @@ Classification: RESTRICTED
         <div style="margin-bottom:16px">
             <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap">
                 <div class="form-group" style="margin-bottom:0;flex:1;min-width:250px">
-                    <label class="form-label">Location Name *</label>
+                    <label class="form-label">Location *</label>
                     <input type="text" class="form-control" id="areaLocationName"
-                        placeholder="e.g. Anka, Zamfara or Birnin Gwari" style="font-size:14px"
+                        placeholder="e.g. Anka, Zamfara or 12.11, 5.96 or 12°6'36&quot;N, 5°57'36&quot;E" style="font-size:14px"
                         onkeydown="if(event.key==='Enter'){event.preventDefault();generateAreaBriefing()}">
                 </div>
                 <button class="btn btn-primary" onclick="generateAreaBriefing()">Generate Area Briefing</button>
             </div>
             <div style="font-size:11px;color:var(--text-muted);margin-top:6px">
-                Enter any location name in Nigeria. The state and coordinates will be resolved automatically.
+                Enter a location name, decimal coordinates (lat, lon), or DMS coordinates.
             </div>
         </div>
 
@@ -628,52 +628,106 @@ function _extractStateFromAddress(displayName) {
     return null;
 }
 
+// Try to parse input as decimal degrees (e.g. "12.11, 5.96")
+function _tryParseDecimalPair(raw) {
+    const parts = raw.split(/[\s,]+/).map(Number);
+    if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])
+        && parts[0] >= -90 && parts[0] <= 90 && parts[1] >= -180 && parts[1] <= 180) {
+        return { lat: parts[0], lon: parts[1] };
+    }
+    return null;
+}
+
+// Reverse-geocode lat/lon to get state name
+async function _reverseGeocodeState(lat, lon) {
+    try {
+        const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&addressdetails=1`;
+        const resp = await fetch(url);
+        const r = await resp.json();
+        if (r.address && r.address.state) {
+            const raw = r.address.state.replace(/\s+state$/i, '').trim();
+            const lower = raw.toLowerCase();
+            if (_knownStates.includes(lower)) return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+        }
+        if (r.display_name) return _extractStateFromAddress(r.display_name);
+    } catch {}
+    return null;
+}
+
 async function generateAreaBriefing() {
     const locationInput = document.getElementById('areaLocationName').value.trim();
     if (!locationInput) {
         document.getElementById('areaBriefingOutput').innerHTML =
-            '<div style="padding:16px;color:var(--warning)">Please enter a location name.</div>';
+            '<div style="padding:16px;color:var(--warning)">Please enter a location, coordinates, or DMS.</div>';
         return;
     }
 
     document.getElementById('areaBriefingOutput').innerHTML =
         '<div class="loading"><div class="spinner"></div> Resolving location & generating briefing... This may take 15-30 seconds.</div>';
 
-    // Geocode the location name via Nominatim
     let lat, lon, resolvedName, resolvedState;
-    try {
-        const query = locationInput.toLowerCase().includes('nigeria') ? locationInput : locationInput + ', Nigeria';
-        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1&addressdetails=1`;
-        const resp = await fetch(url);
-        const results = await resp.json();
 
-        if (!results.length) {
+    // 1) Try DMS coordinates (contains degree symbols or direction letters)
+    const hasDMS = /[°′'″"dmsNSEW]/i.test(locationInput);
+    if (hasDMS) {
+        const dms = _tryParseDMSPair(locationInput);
+        if (dms && dms.lat >= -90 && dms.lat <= 90 && dms.lon >= -180 && dms.lon <= 180) {
+            lat = dms.lat;
+            lon = dms.lon;
+            resolvedName = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+            resolvedState = await _reverseGeocodeState(lat, lon);
+        } else {
             document.getElementById('areaBriefingOutput').innerHTML =
-                '<div style="padding:16px;color:var(--warning)">Location not found. Try a more specific name (e.g. "Anka, Zamfara").</div>';
+                '<div style="padding:16px;color:var(--warning)">Invalid DMS format. Example: 12\u00b06\'36"N, 5\u00b057\'36"E</div>';
             return;
         }
-
-        const r = results[0];
-        lat = parseFloat(r.lat);
-        lon = parseFloat(r.lon);
-        resolvedName = r.display_name.split(',').slice(0, 2).join(',').trim();
-
-        // Extract state from address details or display name
-        if (r.address && r.address.state) {
-            const raw = r.address.state.replace(/\s+state$/i, '').trim();
-            const lower = raw.toLowerCase();
-            resolvedState = _knownStates.includes(lower) ? raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase() : null;
-        }
-        if (!resolvedState) {
-            resolvedState = _extractStateFromAddress(r.display_name);
-        }
-    } catch (e) {
-        document.getElementById('areaBriefingOutput').innerHTML =
-            `<div style="padding:16px;color:var(--warning)">Geocoding failed: ${escHtml(e.message)}</div>`;
-        return;
     }
 
-    // Default to closest known state if not resolved
+    // 2) Try decimal degrees (e.g. "12.11, 5.96")
+    if (lat === undefined) {
+        const dd = _tryParseDecimalPair(locationInput);
+        if (dd) {
+            lat = dd.lat;
+            lon = dd.lon;
+            resolvedName = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+            resolvedState = await _reverseGeocodeState(lat, lon);
+        }
+    }
+
+    // 3) Fall back to location name geocoding
+    if (lat === undefined) {
+        try {
+            const query = locationInput.toLowerCase().includes('nigeria') ? locationInput : locationInput + ', Nigeria';
+            const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1&addressdetails=1`;
+            const resp = await fetch(url);
+            const results = await resp.json();
+
+            if (!results.length) {
+                document.getElementById('areaBriefingOutput').innerHTML =
+                    '<div style="padding:16px;color:var(--warning)">Location not found. Try a more specific name (e.g. "Anka, Zamfara").</div>';
+                return;
+            }
+
+            const r = results[0];
+            lat = parseFloat(r.lat);
+            lon = parseFloat(r.lon);
+            resolvedName = r.display_name.split(',').slice(0, 2).join(',').trim();
+
+            if (r.address && r.address.state) {
+                const raw = r.address.state.replace(/\s+state$/i, '').trim();
+                const lower = raw.toLowerCase();
+                resolvedState = _knownStates.includes(lower) ? raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase() : null;
+            }
+            if (!resolvedState) {
+                resolvedState = _extractStateFromAddress(r.display_name);
+            }
+        } catch (e) {
+            document.getElementById('areaBriefingOutput').innerHTML =
+                `<div style="padding:16px;color:var(--warning)">Geocoding failed: ${escHtml(e.message)}</div>`;
+            return;
+        }
+    }
+
     const state = resolvedState || 'Zamfara';
 
     const body = {
