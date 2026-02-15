@@ -243,20 +243,76 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
+// Parse a single DMS component like "12°30'45.5"N" or "12 30 45.5 N" to decimal degrees
+function _parseDMS(dmsStr) {
+    const m = dmsStr.match(/^([NSEW])?\s*(-?\d+(?:\.\d+)?)[°d\s]+(\d+(?:\.\d+)?)?[′'m\s]*(\d+(?:\.\d+)?)?[″"s\s]*([NSEW])?$/i);
+    if (!m) return NaN;
+    const dir = (m[1] || m[5] || '').toUpperCase();
+    let deg = parseFloat(m[2]) || 0;
+    const min = parseFloat(m[3]) || 0;
+    const sec = parseFloat(m[4]) || 0;
+    let dd = Math.abs(deg) + min / 60 + sec / 3600;
+    if (dir === 'S' || dir === 'W' || deg < 0) dd = -dd;
+    return dd;
+}
+
+// Try to parse DMS coordinate pair from raw input string
+function _tryParseDMSPair(raw) {
+    // Match two DMS groups separated by comma, semicolon, or whitespace between direction letters
+    // Pattern: captures everything up to and including first N/S, then the rest for E/W
+    const twoPartComma = raw.split(/[,;]\s*/);
+    if (twoPartComma.length === 2) {
+        const lat = _parseDMS(twoPartComma[0].trim());
+        const lon = _parseDMS(twoPartComma[1].trim());
+        if (!isNaN(lat) && !isNaN(lon)) return { lat, lon };
+    }
+    // Try splitting on N/S followed by whitespace then number (e.g. "12°30'N 5°57'E")
+    const nsParts = raw.match(/^(.+[NSns])\s+(.+[EWew])$/);
+    if (nsParts) {
+        const lat = _parseDMS(nsParts[1].trim());
+        const lon = _parseDMS(nsParts[2].trim());
+        if (!isNaN(lat) && !isNaN(lon)) return { lat, lon };
+    }
+    // Try E/W first (e.g. "E5°57' N12°30'")
+    const ewFirst = raw.match(/^(.+[EWew])\s+(.+[NSns])$/);
+    if (ewFirst) {
+        const lon = _parseDMS(ewFirst[1].trim());
+        const lat = _parseDMS(ewFirst[2].trim());
+        if (!isNaN(lat) && !isNaN(lon)) return { lat, lon };
+    }
+    return null;
+}
+
 function searchCoordinates(mapInstance, inputId) {
     const input = document.getElementById(inputId);
     if (!input || !mapInstance) return;
 
     const raw = input.value.trim();
-    if (!raw) { showToast('Enter coordinates (e.g. 12.11, 5.96)', 'error'); return; }
+    if (!raw) { showToast('Enter coordinates (e.g. 12.11, 5.96 or 12°6\'36"N, 5°57\'36"E)', 'error'); return; }
 
-    const parts = raw.split(/[\s,]+/).map(Number);
-    if (parts.length < 2 || isNaN(parts[0]) || isNaN(parts[1])) {
-        showToast('Invalid format. Use: latitude, longitude', 'error');
-        return;
+    let lat, lon;
+
+    // Try DMS parsing first if input contains degree symbols, direction letters, or minutes/seconds marks
+    if (/[°′'″"dmsNSEW]/i.test(raw)) {
+        const dms = _tryParseDMSPair(raw);
+        if (dms) {
+            lat = dms.lat;
+            lon = dms.lon;
+        } else {
+            showToast('Invalid DMS format. Example: 12°6\'36"N, 5°57\'36"E', 'error');
+            return;
+        }
+    } else {
+        // Decimal degrees fallback
+        const parts = raw.split(/[\s,]+/).map(Number);
+        if (parts.length < 2 || isNaN(parts[0]) || isNaN(parts[1])) {
+            showToast('Invalid format. Use: lat, lon or DMS (12°6\'36"N, 5°57\'36"E)', 'error');
+            return;
+        }
+        lat = parts[0];
+        lon = parts[1];
     }
 
-    const lat = parts[0], lon = parts[1];
     if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
         showToast('Coordinates out of range', 'error');
         return;
